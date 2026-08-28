@@ -22,14 +22,14 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
 
-class Phase(str, Enum):
+class Phase(StrEnum):
     BASELINE = "BASELINE"
     DIVERGENCE = "DIVERGENCE"
     ACTOR = "ACTOR"
@@ -39,7 +39,7 @@ class Phase(str, Enum):
 PHASE_ORDER = [Phase.BASELINE, Phase.DIVERGENCE, Phase.ACTOR, Phase.CAUSE]
 
 
-class ClaimType(str, Enum):
+class ClaimType(StrEnum):
     SOURCE_IN_SPEC = "SOURCE_IN_SPEC"
     SOURCE_OUT_OF_SPEC = "SOURCE_OUT_OF_SPEC"
     DIVERGENCE_STAGE = "DIVERGENCE_STAGE"
@@ -54,6 +54,7 @@ Confidence = Literal["high", "medium", "low"]
 # --------------------------------------------------------------------------
 # Evidence
 # --------------------------------------------------------------------------
+
 
 class EvidenceStep(BaseModel, frozen=True):
     """One observation. Provenance fields are controller-bound and immutable."""
@@ -131,7 +132,7 @@ class EvidenceLedger:
             raise LedgerError("no pending observation to interpret")
         step = EvidenceStep(
             **self._pending.model_dump(exclude={"raw_result"}),
-            recorded_at=datetime.now(timezone.utc),
+            recorded_at=datetime.now(UTC),
             finding=finding,
             supports=supports,
         )
@@ -170,6 +171,7 @@ class LedgerError(RuntimeError):
 # Claims and conclusion
 # --------------------------------------------------------------------------
 
+
 class Claim(BaseModel):
     claim_type: ClaimType
     claim_value: str = Field(min_length=1, max_length=500)
@@ -191,6 +193,7 @@ class Conclusion(BaseModel):
 # --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------
+
 
 class ValidationResult(BaseModel):
     ok: bool
@@ -286,9 +289,7 @@ def allowlist_from_profile(profile_data: dict) -> dict[str, dict]:
     }
 
 
-def safe_record_interpretation(
-    ledger: EvidenceLedger, finding: str, supports: bool
-) -> dict:
+def safe_record_interpretation(ledger: EvidenceLedger, finding: str, supports: bool) -> dict:
     """Tool-facing wrapper. NEVER raises.
 
     ADK turns an exception raised inside a tool into an aborted invocation rather

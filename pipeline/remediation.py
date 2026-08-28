@@ -18,11 +18,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent.evidence import ProposedAction, validate_action
+
 from .ffmpeg import loudnorm_filter, transcode_audio
 from .policy import PASS, Profile, Verdict, evaluate
 from .qc import run_qc
-
-from agent.evidence import ProposedAction, validate_action
 
 REENCODE_WITH_PROFILE = "reencode_with_profile"
 REENCODE_WITH_LOUDNESS_TARGET = "reencode_with_loudness_target"

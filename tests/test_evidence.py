@@ -31,7 +31,7 @@ PROFILE = Path(__file__).parent.parent / "pipeline" / "profiles" / "ebu_r128.yam
 
 @pytest.fixture
 def allowlist() -> dict:
-    with open(PROFILE) as fh:
+    with PROFILE.open() as fh:
         return allowlist_from_profile(yaml.safe_load(fh))
 
 
@@ -217,7 +217,7 @@ class TestActionAllowlist:
     def test_out_of_range_parameter_rejected(self, ledger, allowlist):
         a = ProposedAction(
             action_id="reencode_with_loudness_target",
-            params={"target_lufs": -60.0},   # allowed range is -31..-16
+            params={"target_lufs": -60.0},  # allowed range is -31..-16
             rationale="crank it",
         )
         res = validate_conclusion(self._concl(a), ledger, allowlist=allowlist)

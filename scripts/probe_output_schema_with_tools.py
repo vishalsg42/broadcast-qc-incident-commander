@@ -88,9 +88,7 @@ async def main() -> int:
         return 1
 
     runner = InMemoryRunner(agent=agent, app_name="probe")
-    session = await runner.session_service.create_session(
-        app_name="probe", user_id="u1"
-    )
+    session = await runner.session_service.create_session(app_name="probe", user_id="u1")
 
     final = None
     try:

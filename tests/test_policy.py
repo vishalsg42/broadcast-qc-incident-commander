@@ -140,7 +140,9 @@ class TestVerdictShape:
     def test_verdict_is_machine_readable(self, profile):
         d = evaluate(profile, _report()).to_dict()
         assert d["profile_id"] == "ebu-r128-tv"
-        assert all({"check_id", "status", "measured", "expected"} <= c.keys() for c in d["checks"])
+        assert all(
+            {"check_id", "status", "measured", "expected"} <= c.keys() for c in d["checks"]
+        )
 
     def test_same_input_same_verdict(self, profile):
         """Determinism: the gate is a pure function, called twice on block and clear."""

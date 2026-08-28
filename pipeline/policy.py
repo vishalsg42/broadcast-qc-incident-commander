@@ -27,7 +27,7 @@ BLOCKED = "BLOCKED"
 @dataclass(frozen=True)
 class CheckResult:
     check_id: str
-    status: str                      # PASS | BLOCKED
+    status: str  # PASS | BLOCKED
     message: str
     measured: float | str | None = None
     expected: str | None = None
@@ -75,8 +75,8 @@ class Profile:
         self._d = data
 
     @classmethod
-    def load(cls, path: str | Path) -> "Profile":
-        with open(path) as fh:
+    def load(cls, path: str | Path) -> Profile:
+        with Path(path).open() as fh:
             return cls(yaml.safe_load(fh))
 
     @property
@@ -175,8 +175,7 @@ def _check_loudness(profile: Profile, report: QCReport) -> list[CheckResult]:
             check_id="loudness.integrated",
             status=PASS if abs(deviation) <= tol else BLOCKED,
             message=(
-                f"integrated loudness {measured} LUFS "
-                f"({deviation:+.1f} LU vs target {target})"
+                f"integrated loudness {measured} LUFS ({deviation:+.1f} LU vs target {target})"
             ),
             measured=measured,
             expected=expected,
@@ -210,9 +209,7 @@ def _check_black(profile: Profile, report: QCReport) -> list[CheckResult]:
         want = reg["end_s"] - reg["start_s"]
         covered = 0.0
         for b in report.black_intervals:
-            covered += max(
-                0.0, min(b.end_s, reg["end_s"]) - max(b.start_s, reg["start_s"])
-            )
+            covered += max(0.0, min(b.end_s, reg["end_s"]) - max(b.start_s, reg["start_s"]))
         ok = covered >= want * 0.9
         checks.append(
             CheckResult(

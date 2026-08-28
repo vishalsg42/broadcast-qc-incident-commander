@@ -142,18 +142,24 @@ class TestEndToEndLoop:
         assert res.verdict.profile_id == before.profile_id
         assert res.verdict.profile_version == before.profile_version
 
-    def test_repairs_never_overwrite_each_other(
-        self, profile, allowlist, faulted, tmp_path
-    ):
+    def test_repairs_never_overwrite_each_other(self, profile, allowlist, faulted, tmp_path):
         """Each repair is a new generation, so evidence cannot be destroyed."""
         src = faulted.stage(NORMALIZE).output_path
         a = execute_repair(
-            "reencode_with_profile", {"profile_id": "ebu-r128-tv"},
-            source_path=src, profile=profile, out_dir=tmp_path, allowlist=allowlist,
+            "reencode_with_profile",
+            {"profile_id": "ebu-r128-tv"},
+            source_path=src,
+            profile=profile,
+            out_dir=tmp_path,
+            allowlist=allowlist,
         )
         b = execute_repair(
-            "reencode_with_profile", {"profile_id": "ebu-r128-tv"},
-            source_path=src, profile=profile, out_dir=tmp_path, allowlist=allowlist,
+            "reencode_with_profile",
+            {"profile_id": "ebu-r128-tv"},
+            source_path=src,
+            profile=profile,
+            out_dir=tmp_path,
+            allowlist=allowlist,
         )
         assert a.output_path != b.output_path
         assert Path(a.output_path).exists() and Path(b.output_path).exists()

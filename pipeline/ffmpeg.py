@@ -47,8 +47,16 @@ def analyse(src: str | Path, *, audio_filter: str = "", video_filter: str = "") 
 
 def probe_duration(src: str | Path) -> float:
     out = run(
-        [FFPROBE, "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", str(src)]
+        [
+            FFPROBE,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
+            str(src),
+        ]
     ).strip()
     try:
         return float(out.splitlines()[0])
@@ -64,10 +72,23 @@ def transcode_audio(src: str | Path, dst: str | Path, audio_filter: str) -> Path
     """
     dst = Path(dst)
     run(
-        [FFMPEG, *_BASE, "-y", "-i", str(src),
-         "-af", audio_filter,
-         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-         *FASTSTART, str(dst)]
+        [
+            FFMPEG,
+            *_BASE,
+            "-y",
+            "-i",
+            str(src),
+            "-af",
+            audio_filter,
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            *FASTSTART,
+            str(dst),
+        ]
     )
     return dst
 

@@ -25,9 +25,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
@@ -41,7 +42,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 SERVICE_NAME = "qc-pipeline"
 LOGGER_NAME = "qcic.pipeline"
 
-_state: "_Telemetry | None" = None
+_state: _Telemetry | None = None
 
 
 @dataclass
@@ -56,9 +57,7 @@ def _endpoint() -> str | None:
     return os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or None
 
 
-def init(
-    endpoint: str | None = None, *, service_name: str = SERVICE_NAME
-) -> bool:
+def init(endpoint: str | None = None, *, service_name: str = SERVICE_NAME) -> bool:
     """Wire up trace and log export. Returns False if telemetry is disabled."""
     global _state
     if _state is not None:
@@ -68,9 +67,7 @@ def init(
     if not endpoint:
         return False
 
-    resource = Resource.create(
-        {"service.name": service_name, "service.version": "0.1.0"}
-    )
+    resource = Resource.create({"service.name": service_name, "service.version": "0.1.0"})
 
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(
@@ -91,6 +88,28 @@ def init(
 
     _state = _Telemetry(tracer_provider, logger_provider, endpoint)
     return True
+
+
+def init_for_test(span_exporter) -> None:
+    """Enable tracing against an in-memory exporter, for tests.
+
+    Exists so the span hierarchy can be asserted without a running collector.
+    Log export stays disabled; only trace structure is under test.
+    """
+    global _state
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+    resource = Resource.create({"service.name": f"{SERVICE_NAME}-test"})
+    tracer_provider = TracerProvider(resource=resource)
+    tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    _state = _Telemetry(tracer_provider, LoggerProvider(resource=resource), "memory://")
+
+
+def tracer() -> Any:
+    """The tracer bound to this module's provider (not the global one)."""
+    return (
+        _state.tracer_provider.get_tracer(__name__) if _state else trace.get_tracer(__name__)
+    )
 
 
 def enabled() -> bool:
@@ -120,6 +139,26 @@ def current_trace_ids() -> tuple[str, str]:
 
 
 @contextmanager
+def run_span(*, run_id: str, asset_id: str, source_path: str) -> Iterator[Any]:
+    """Root span for one delivery.
+
+    Every stage span MUST be a child of this, otherwise each stage starts its own
+    root trace and Tempo shows three unrelated single-span traces instead of one
+    waterfall covering the asset's journey - which is the entire point of tracing
+    an artefact rather than a service.
+    """
+    if not enabled():
+        yield None
+        return
+
+    with tracer().start_as_current_span("delivery.run") as span:
+        span.set_attribute("qc.run_id", run_id)
+        span.set_attribute("qc.asset_id", asset_id)
+        span.set_attribute("qc.source_path", source_path)
+        yield span
+
+
+@contextmanager
 def stage_span(
     stage: str,
     *,
@@ -139,8 +178,7 @@ def stage_span(
         yield None
         return
 
-    tracer = trace.get_tracer(__name__)
-    with tracer.start_as_current_span(f"stage.{stage}") as span:
+    with tracer().start_as_current_span(f"stage.{stage}") as span:
         span.set_attribute("qc.stage", stage)
         span.set_attribute("qc.preset_id", preset_id)
         span.set_attribute("qc.preset_version", preset_version)

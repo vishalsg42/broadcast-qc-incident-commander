@@ -1,0 +1,38 @@
+[project]
+name = "broadcast-qc-incident-commander"
+version = "0.1.0"
+description = "Attributes a delivery QC failure to the pipeline stage and preset version that introduced it"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+
+[tool.ruff]
+line-length = 95
+target-version = "py312"
+exclude = [".venv", "out", "media"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "SIM",      # simplify
+    "C4",       # comprehensions
+    "RET",      # returns
+    "PTH",      # prefer pathlib
+    "EXE",      # shebang/executable consistency
+]
+ignore = [
+    "E501",     # line length is handled by the formatter
+    "B008",     # function call in default arg - fine for our DI style
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]          # asserts are the point
+"scripts/*" = ["E402"]        # sys.path bootstrap before imports
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

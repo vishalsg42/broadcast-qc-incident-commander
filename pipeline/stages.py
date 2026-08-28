@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -42,6 +42,18 @@ class Preset:
     stage: str
 
 
+# Ingest admits the source unchanged; it exists so the source is measured
+# as-received, which is what lets BASELINE rule the supplier in or out.
+INGEST_PRESET = Preset(
+    id="ingest_passthrough_v1",
+    version=1,
+    changed_at="2026-01-01T00:00:00Z",
+    description="Admit source unchanged; measure as received",
+    audio_filter="anull",
+    stage=INGEST,
+)
+
+
 class PresetLibrary:
     def __init__(self, data: dict):
         self._by_stage: dict[str, list[Preset]] = {}
@@ -59,15 +71,19 @@ class PresetLibrary:
             ]
         self._defaults = {
             stage: next(
-                (p for p, e in zip(self._by_stage[stage], data[stage]) if e.get("default")),
+                (
+                    p
+                    for p, e in zip(self._by_stage[stage], data[stage], strict=True)
+                    if e.get("default")
+                ),
                 self._by_stage[stage][0],
             )
             for stage in self._by_stage
         }
 
     @classmethod
-    def load(cls, path: str | Path = PRESETS_PATH) -> "PresetLibrary":
-        with open(path) as fh:
+    def load(cls, path: str | Path = PRESETS_PATH) -> PresetLibrary:
+        with Path(path).open() as fh:
             return cls(yaml.safe_load(fh))
 
     def default_for(self, stage: str) -> Preset:
@@ -133,7 +149,7 @@ class PipelineRun:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def run_pipeline(
@@ -170,72 +186,88 @@ def run_pipeline(
     )
 
     current = src
-    for stage in STAGE_ORDER:
-        started = _now()
+    # Every stage span must be a child of this one, or Tempo shows three
+    # unrelated single-span traces instead of the asset's journey.
+    with telemetry.run_span(run_id=run.run_id, asset_id=run.asset_id, source_path=str(src)):
+        for stage in STAGE_ORDER:
+            preset, dst = _resolve_stage(stage, run, presets, overrides, out, current)
+            result = _execute_stage(stage, preset, current, dst, run, black_opts, profile)
+            run.stages.append(result)
+            current = Path(result.output_path)
 
-        if stage == INGEST:
-            # Ingest does not transform - it admits the source and measures it.
-            preset = Preset(
-                id="ingest_passthrough_v1",
-                version=1,
-                changed_at="2026-01-01T00:00:00Z",
-                description="Admit source unchanged; measure as received",
-                audio_filter="anull",
-                stage=INGEST,
-            )
-            dst = current
-        else:
-            pid = overrides.get(stage)
-            preset = presets.get(stage, pid) if pid else presets.default_for(stage)
-            dst = out / f"{run.run_id}_{stage}.mp4"
+        telemetry.emit_pipeline_complete(
+            run_id=run.run_id, asset_id=run.asset_id, stage_count=len(run.stages)
+        )
 
-        with telemetry.stage_span(
-            stage,
-            preset_id=preset.id,
-            preset_version=preset.version,
-            preset_changed_at=preset.changed_at,
+    return run
+
+
+def _resolve_stage(
+    stage: str,
+    run: PipelineRun,
+    presets: PresetLibrary,
+    overrides: dict[str, str],
+    out: Path,
+    current: Path,
+) -> tuple[Preset, Path]:
+    """Pick the preset for a stage and decide where its output goes."""
+    if stage == INGEST:
+        # Ingest does not transform - it admits the source and measures it.
+        return INGEST_PRESET, current
+    preset_id = overrides.get(stage)
+    preset = presets.get(stage, preset_id) if preset_id else presets.default_for(stage)
+    return preset, out / f"{run.run_id}_{stage}.mp4"
+
+
+def _execute_stage(
+    stage: str,
+    preset: Preset,
+    src: Path,
+    dst: Path,
+    run: PipelineRun,
+    black_opts: dict | None,
+    profile: Profile | None,
+) -> StageResult:
+    """Transcode (unless ingest), measure, and emit telemetry for one stage."""
+    started = _now()
+    with telemetry.stage_span(
+        stage,
+        preset_id=preset.id,
+        preset_version=preset.version,
+        preset_changed_at=preset.changed_at,
+        run_id=run.run_id,
+        asset_id=run.asset_id,
+    ):
+        if stage != INGEST:
+            transcode_audio(src, dst, preset.audio_filter)
+        report = run_qc(dst, black_opts=black_opts)
+
+        telemetry.emit_qc_observation(
+            stage=stage,
             run_id=run.run_id,
             asset_id=run.asset_id,
-        ):
-            if stage != INGEST:
-                transcode_audio(current, dst, preset.audio_filter)
-            report = run_qc(dst, black_opts=black_opts)
-
-            verdict = evaluate(profile, report).status if profile else "UNKNOWN"
-            telemetry.emit_qc_observation(
-                stage=stage,
-                run_id=run.run_id,
-                asset_id=run.asset_id,
-                preset_id=preset.id,
-                preset_version=preset.version,
-                verdict=verdict,
-                measurements={
-                    "integrated_lufs": report.loudness.integrated_lufs,
-                    "true_peak_dbtp": report.loudness.true_peak_dbtp,
-                    "black_interval_count": len(report.black_intervals),
-                    "duration_s": report.duration_s,
-                },
-            )
-            trace_id, span_id = telemetry.current_trace_ids()
-
-        run.stages.append(
-            StageResult(
-                stage=stage,
-                preset=preset,
-                input_path=str(current),
-                output_path=str(dst),
-                qc=report,
-                span_id=span_id or uuid.uuid4().hex[:16],
-                started_at=started,
-                ended_at=_now(),
-            )
+            preset_id=preset.id,
+            preset_version=preset.version,
+            verdict=evaluate(profile, report).status if profile else "UNKNOWN",
+            measurements={
+                "integrated_lufs": report.loudness.integrated_lufs,
+                "true_peak_dbtp": report.loudness.true_peak_dbtp,
+                "black_interval_count": len(report.black_intervals),
+                "duration_s": report.duration_s,
+            },
         )
-        current = dst
+        _, span_id = telemetry.current_trace_ids()
 
-    telemetry.emit_pipeline_complete(
-        run_id=run.run_id, asset_id=run.asset_id, stage_count=len(run.stages)
+    return StageResult(
+        stage=stage,
+        preset=preset,
+        input_path=str(src),
+        output_path=str(dst),
+        qc=report,
+        span_id=span_id or uuid.uuid4().hex[:16],
+        started_at=started,
+        ended_at=_now(),
     )
-    return run
 
 
 if __name__ == "__main__":

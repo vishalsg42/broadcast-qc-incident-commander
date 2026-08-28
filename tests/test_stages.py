@@ -120,9 +120,7 @@ class TestFaultedRun:
 
     def test_divergence_is_locatable_from_stage_qc_alone(self, profile, faulted_run):
         """The evidence needed to find the failing stage exists in the telemetry."""
-        statuses = [
-            (s.stage, evaluate(profile, s.qc).status) for s in faulted_run.stages
-        ]
+        statuses = [(s.stage, evaluate(profile, s.qc).status) for s in faulted_run.stages]
         first_bad = next(st for st, v in statuses if v == BLOCKED)
         assert first_bad == PACKAGE
 
@@ -144,5 +142,5 @@ class TestRunShape:
         assert len(set(ids)) == 3
 
     def test_stages_are_chained_input_to_output(self, clean_run):
-        for prev, nxt in zip(clean_run.stages, clean_run.stages[1:]):
+        for prev, nxt in zip(clean_run.stages, clean_run.stages[1:], strict=False):
             assert nxt.input_path == prev.output_path

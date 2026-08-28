@@ -1,0 +1,25 @@
+# Local observability stack for development.
+#
+# grafana/otel-lgtm bundles Grafana, Loki, Tempo, Prometheus and an OTel
+# Collector behind one OTLP endpoint. Fast to iterate against and works offline.
+#
+# NOTE: this is a development convenience, NOT a compatibility test for Grafana
+# Cloud. Local datasource UIDs are `prometheus` / `loki` / `tempo`; Grafana Cloud
+# generates stack-specific UIDs. Anything that pins a UID must be remapped on
+# cutover - it is not an environment-variable swap. See docs/DECISIONS.md.
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: qcic-lgtm
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - lgtm-data:/data
+volumes:
+  lgtm-data:

@@ -19,7 +19,9 @@ from pathlib import Path
 
 import yaml
 
+from . import telemetry
 from .ffmpeg import transcode_audio
+from .policy import Profile, evaluate
 from .qc import QCError, QCReport, run_qc
 
 PRESETS_PATH = Path(__file__).parent / "presets.yaml"
@@ -142,11 +144,15 @@ def run_pipeline(
     overrides: dict[str, str] | None = None,
     black_opts: dict | None = None,
     asset_id: str | None = None,
+    profile: Profile | None = None,
 ) -> PipelineRun:
     """Run ingest -> normalize -> package, measuring QC after every stage.
 
     `overrides` maps stage -> preset_id and is how a fault is injected: it is
     ordinary configuration, not a special case buried in the code.
+
+    `profile` is optional and only used to label emitted telemetry with a verdict;
+    it never changes what the pipeline produces.
     """
     src = Path(source)
     if not src.exists():
@@ -166,7 +172,6 @@ def run_pipeline(
     current = src
     for stage in STAGE_ORDER:
         started = _now()
-        span_id = uuid.uuid4().hex[:16]
 
         if stage == INGEST:
             # Ingest does not transform - it admits the source and measures it.
@@ -183,9 +188,36 @@ def run_pipeline(
             pid = overrides.get(stage)
             preset = presets.get(stage, pid) if pid else presets.default_for(stage)
             dst = out / f"{run.run_id}_{stage}.mp4"
-            transcode_audio(current, dst, preset.audio_filter)
 
-        report = run_qc(dst, black_opts=black_opts)
+        with telemetry.stage_span(
+            stage,
+            preset_id=preset.id,
+            preset_version=preset.version,
+            preset_changed_at=preset.changed_at,
+            run_id=run.run_id,
+            asset_id=run.asset_id,
+        ):
+            if stage != INGEST:
+                transcode_audio(current, dst, preset.audio_filter)
+            report = run_qc(dst, black_opts=black_opts)
+
+            verdict = evaluate(profile, report).status if profile else "UNKNOWN"
+            telemetry.emit_qc_observation(
+                stage=stage,
+                run_id=run.run_id,
+                asset_id=run.asset_id,
+                preset_id=preset.id,
+                preset_version=preset.version,
+                verdict=verdict,
+                measurements={
+                    "integrated_lufs": report.loudness.integrated_lufs,
+                    "true_peak_dbtp": report.loudness.true_peak_dbtp,
+                    "black_interval_count": len(report.black_intervals),
+                    "duration_s": report.duration_s,
+                },
+            )
+            trace_id, span_id = telemetry.current_trace_ids()
+
         run.stages.append(
             StageResult(
                 stage=stage,
@@ -193,13 +225,16 @@ def run_pipeline(
                 input_path=str(current),
                 output_path=str(dst),
                 qc=report,
-                span_id=span_id,
+                span_id=span_id or uuid.uuid4().hex[:16],
                 started_at=started,
                 ended_at=_now(),
             )
         )
         current = dst
 
+    telemetry.emit_pipeline_complete(
+        run_id=run.run_id, asset_id=run.asset_id, stage_count=len(run.stages)
+    )
     return run
 
 

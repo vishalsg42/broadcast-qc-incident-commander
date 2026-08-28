@@ -233,12 +233,12 @@ def validate_conclusion(
                 errors.append(f"claims[{i}]: step {sid!r} belongs to another run")
 
     if conclusion.proposed_action is not None and allowlist is not None:
-        errors.extend(_validate_action(conclusion.proposed_action, allowlist))
+        errors.extend(validate_action(conclusion.proposed_action, allowlist))
 
     return ValidationResult(ok=not errors, errors=errors)
 
 
-def _validate_action(action: ProposedAction, allowlist: dict[str, dict]) -> list[str]:
+def validate_action(action: ProposedAction, allowlist: dict[str, dict]) -> list[str]:
     if action.action_id not in allowlist:
         return [
             f"action {action.action_id!r} is not on the allowlist "

@@ -1,0 +1,45 @@
+# Transcode presets, versioned.
+#
+# Faults live HERE, as data. Not as `if asset_id == "demo_001"` in the pipeline.
+# Real facilities do not hunt for a broken worker - they hunt for which transcode
+# preset changed, and when. So attribution targets a preset VERSION, and the
+# changed_at timestamps are what make that attribution legible.
+#
+# The hero fault: normalize does its job correctly, and then PACKAGE remaps audio
+# channels. Defect and cause are in DIFFERENT stages, which is what makes the
+# investigation non-trivial - you cannot guess it from the failing measurement.
+
+normalize:
+  - id: norm_ebu_v3
+    version: 3
+    changed_at: "2026-08-14T09:20:00Z"
+    default: true
+    description: "EBU R128 single-pass normalisation to -23 LUFS"
+    audio_filter: "loudnorm=I=-23:TP=-1.5:LRA=11"
+
+  - id: norm_ebu_v2
+    version: 2
+    changed_at: "2026-06-02T11:00:00Z"
+    description: "Superseded: normalised to -20 LUFS (old house target)"
+    audio_filter: "loudnorm=I=-20:TP=-1.5:LRA=11"
+
+package:
+  - id: pkg_h264_v6
+    version: 6
+    changed_at: "2026-07-30T16:45:00Z"
+    default: true
+    description: "H.264 delivery wrap, stereo passthrough"
+    # Channel layout is preserved exactly. Loudness out == loudness in.
+    audio_filter: "anull"
+
+  - id: pkg_h264_v7
+    version: 7
+    changed_at: "2026-08-29T14:02:00Z"
+    description: >
+      H.264 delivery wrap. Intended to fold a 5.1 M&E bed to stereo, but the
+      downmix is applied unconditionally, so already-stereo material gets both
+      channels summed into each output channel. Picture is untouched; delivered
+      loudness rises well outside R128 tolerance even though the normalise stage
+      did its job correctly.
+    # A real channel remap: c0 and c1 both become (L+R). ~+5-6 LU.
+    audio_filter: "pan=stereo|c0=c0+c1|c1=c0+c1"

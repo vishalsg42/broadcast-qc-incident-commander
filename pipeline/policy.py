@@ -88,6 +88,30 @@ class Profile:
         return int(self._d.get("version", 1))
 
     @property
+    def loudness_target(self) -> tuple[float, float]:
+        """(target_lufs, tolerance_lu) for integrated loudness."""
+        cfg = self._d["loudness"]["integrated_lufs"]
+        return float(cfg["target"]), float(cfg["tolerance"])
+
+    @property
+    def true_peak_ceiling(self) -> float | None:
+        cfg = self._d["loudness"].get("true_peak_dbtp")
+        return float(cfg["max"]) if cfg else None
+
+    @property
+    def max_contiguous_body_black(self) -> float:
+        return float(self._d["black"]["body"]["max_contiguous_black_s"])
+
+    @property
+    def remediation_allowlist(self) -> list[dict]:
+        return self._d.get("remediation_allowlist", [])
+
+    @property
+    def raw(self) -> dict:
+        """Escape hatch for callers that need the whole document."""
+        return self._d
+
+    @property
     def black_detector_opts(self) -> dict:
         d = self._d["black"]["detector"]
         return {
@@ -141,9 +165,7 @@ def _subtract_regions(
 
 
 def _check_loudness(profile: Profile, report: QCReport) -> list[CheckResult]:
-    cfg = profile._d["loudness"]["integrated_lufs"]
-    target = float(cfg["target"])
-    tol = float(cfg["tolerance"])
+    target, tol = profile.loudness_target
     measured = report.loudness.integrated_lufs
     deviation = measured - target
     expected = f"{target} +/- {tol} LUFS (integrated)"
@@ -161,10 +183,9 @@ def _check_loudness(profile: Profile, report: QCReport) -> list[CheckResult]:
         )
     ]
 
-    tp_cfg = profile._d["loudness"].get("true_peak_dbtp")
+    tp_max = profile.true_peak_ceiling
     tp = report.loudness.true_peak_dbtp
-    if tp_cfg is not None and tp is not None:
-        tp_max = float(tp_cfg["max"])
+    if tp_max is not None and tp is not None:
         checks.append(
             CheckResult(
                 check_id="loudness.true_peak",
@@ -179,7 +200,7 @@ def _check_loudness(profile: Profile, report: QCReport) -> list[CheckResult]:
 
 def _check_black(profile: Profile, report: QCReport) -> list[CheckResult]:
     regions = profile.resolved_permitted_regions(report.duration_s)
-    max_body = float(profile._d["black"]["body"]["max_contiguous_black_s"])
+    max_body = profile.max_contiguous_body_black
     checks: list[CheckResult] = []
 
     # 1. Required regions must actually contain black.

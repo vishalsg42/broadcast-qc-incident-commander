@@ -12,16 +12,13 @@ Measurements come from ffmpeg filters that genuinely decode the file:
 from __future__ import annotations
 
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-FFMPEG = "ffmpeg"
-FFPROBE = "ffprobe"
+from .ffmpeg import FFmpegError, analyse, probe_duration
 
-
-class QCError(RuntimeError):
-    """ffmpeg failed or produced output we could not parse."""
+# Kept as an alias so callers have one exception type to catch across the pipeline.
+QCError = FFmpegError
 
 
 @dataclass(frozen=True)
@@ -66,29 +63,6 @@ class QCReport:
         }
 
 
-def _run(cmd: list[str]) -> str:
-    """Run a command, returning combined stdout+stderr (ffmpeg reports on stderr)."""
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    out = (proc.stdout or "") + (proc.stderr or "")
-    if proc.returncode != 0:
-        raise QCError(f"{cmd[0]} exited {proc.returncode}\n{out[-2000:]}")
-    return out
-
-
-def probe_duration(path: str | Path) -> float:
-    out = _run(
-        [
-            FFPROBE, "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "csv=p=0", str(path),
-        ]
-    ).strip()
-    try:
-        return float(out.splitlines()[0])
-    except (ValueError, IndexError) as exc:
-        raise QCError(f"could not parse duration from {out!r}") from exc
-
-
 # The ebur128 Summary block looks like:
 #
 #   Summary:
@@ -111,12 +85,7 @@ _RE_PEAK = re.compile(r"^\s*Peak:\s*(-?\d+(?:\.\d+)?)\s*dBFS", re.M)
 
 def measure_loudness(path: str | Path) -> LoudnessMeasurement:
     """Measure EBU R128 integrated loudness and true peak with a full decode pass."""
-    out = _run(
-        [
-            FFMPEG, "-hide_banner", "-nostats", "-i", str(path),
-            "-af", "ebur128=peak=true", "-f", "null", "-",
-        ]
-    )
+    out = analyse(path, audio_filter="ebur128=peak=true")
     m_i = _RE_I.findall(out)
     if not m_i:
         raise QCError(f"no integrated loudness in ebur128 output:\n{out[-2000:]}")
@@ -152,9 +121,7 @@ def detect_black(
         f":pix_th={pixel_black_threshold}"
         f":pic_th={picture_black_ratio}"
     )
-    out = _run(
-        [FFMPEG, "-hide_banner", "-nostats", "-i", str(path), "-vf", vf, "-f", "null", "-"]
-    )
+    out = analyse(path, video_filter=vf)
     return [
         BlackInterval(start_s=float(a), end_s=float(b), duration_s=float(d))
         for a, b, d in _RE_BLACK.findall(out)

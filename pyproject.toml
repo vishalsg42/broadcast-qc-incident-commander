@@ -36,3 +36,6 @@ ignore = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+markers = [
+    "integration: needs the local Grafana stack (docker compose -f docker/docker-compose.yml up -d)",
+]

@@ -1,0 +1,82 @@
+# Delivery profile: EBU R128, European broadcaster.
+#
+# EBU R128 is an EBU *recommendation*, widely adopted by European broadcasters and
+# national regimes. It is not EU law. (The US equivalent is ATSC A/85 / the CALM
+# Act, which governs the loudness of commercial advertisements. Netflix's ~-27 LKFS
+# is dialogue-gated and is a different measurement that ffmpeg's ebur128 filter
+# does not report - it needs its own profile, not a changed number here.)
+#
+# This file is the ONLY authority on pass/fail. The policy engine reads it and
+# decides. No model ever adjudicates compliance.
+
+id: ebu-r128-tv
+name: EBU R128 — European broadcast delivery
+version: 1
+standard: "EBU R128 / EBU Tech 3341"
+
+loudness:
+  # Integrated (programme) loudness, ffmpeg `ebur128` summary "I" value.
+  integrated_lufs:
+    target: -23.0
+    tolerance: 0.5          # +/- 0.5 LU where exact normalisation is practicable
+    measurement: integrated # NOT momentary, NOT short-term, NOT dialogue-gated
+  true_peak_dbtp:
+    max: -1.0
+
+# Black is a POLICY, not a boolean.
+#
+# Deliverables *mandate* black in specific places: head black, bars and tone, a
+# slate, a 2-pop, black between programme parts, and black at ad-break positions in
+# commercial versions. A profile that failed on any black frame would reject nearly
+# every legitimate master in existence.
+#
+# Scope note: we evaluate against explicitly scheduled segments plus precomputed
+# telemetry. Full content-aware black classification is a separate subsystem and is
+# deliberately out of scope.
+black:
+  detector:
+    # ffmpeg blackdetect thresholds. These are profile settings, not universal
+    # standards - which is exactly why they live in the profile.
+    pixel_black_threshold: 0.10
+    picture_black_ratio: 0.98
+    min_duration_s: 0.5
+
+  # Regions where black is REQUIRED or PERMITTED. Times are relative to programme
+  # start (00:00:00.000 = first frame of the delivered file).
+  permitted_regions:
+    - id: head_black
+      required: true
+      start_s: 0.0
+      end_s: 10.0
+      note: "Head black before programme start"
+    - id: tail_black
+      required: false
+      start_s: -2.0        # negative = relative to end of file
+      end_s: 0.0
+      note: "Tail black after programme end"
+
+  # Inside the programme body, black is a defect beyond this duration.
+  body:
+    max_contiguous_black_s: 1.0
+    note: "Longer than this inside the body indicates a bad splice or drop"
+
+# Faults that terminate investigation rather than proposing a repair.
+# If the SOURCE arrived out of spec, the correct answer is to reject the source -
+# not to re-encode our way out of a supplier problem.
+source_gate:
+  reject_if_source_out_of_spec: true
+
+# What the agent is permitted to propose. This list is the entire action space.
+# The agent selects an id and supplies validated parameters; it never emits a
+# shell command. Execution authority belongs to the worker via IAM, not to the
+# agent and not to any Grafana token.
+remediation_allowlist:
+  - id: reencode_with_profile
+    params:
+      profile_id: { enum: [ebu-r128-tv, atsc-a85-tv] }
+  - id: reencode_with_loudness_target
+    params:
+      target_lufs: { min: -31.0, max: -16.0 }
+  - id: escalate_to_human
+    params:
+      reason: { type: string, max_length: 500 }

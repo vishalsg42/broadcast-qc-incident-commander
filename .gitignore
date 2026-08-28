@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+media/*.mp4
+media/*.mov
+!media/.gitkeep
+out/
+.DS_Store
+*.log
+.adk_cache/
+.gcloud/

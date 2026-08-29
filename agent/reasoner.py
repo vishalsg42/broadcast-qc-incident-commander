@@ -85,6 +85,10 @@ other gcloud account on this machine:
 
     ./scripts/login.sh
 
+If the message mentions an API KEY, the cause is usually a missing
+GOOGLE_GENAI_USE_VERTEXAI=TRUE: google-genai then targets the Gemini Developer
+API instead of Vertex, and asks for a key that this project never uses.
+
 It sets CLOUDSDK_CONFIG to ./.gcloud, signs in, selects the project, configures
 Application Default Credentials with a quota project, and enables the Vertex AI
 API. Verify with ./scripts/guard_env.sh before retrying.
@@ -230,6 +234,11 @@ def _is_credentials_failure(exc: Exception) -> bool:
             "was not found",
             "unauthenticated",
             "permission denied on resource project",
+            # google-genai falls back to the Developer API when
+            # GOOGLE_GENAI_USE_VERTEXAI is unset, and then complains about a
+            # missing API key rather than about Vertex credentials.
+            "no api key was provided",
+            "missing key inputs argument",
         )
     )
 

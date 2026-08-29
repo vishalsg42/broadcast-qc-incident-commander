@@ -18,6 +18,7 @@ import queue
 from collections.abc import Iterator
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -28,6 +29,13 @@ from .orchestrator import FIXTURES, Orchestrator, Status
 ROOT = Path(__file__).resolve().parent.parent
 MEDIA_DIR = ROOT / "media"
 OUT_DIR = ROOT / "out"
+
+# Load .env at import so the server behaves identically however it is launched.
+# Without GOOGLE_GENAI_USE_VERTEXAI=TRUE, google-genai silently falls back to the
+# Gemini Developer API and asks for an API key - an error that looks nothing like
+# the missing-ADC problem it actually is.
+load_dotenv(ROOT / ".env")
+os.environ.setdefault("CLOUDSDK_CONFIG", str(ROOT / ".gcloud"))
 
 app = FastAPI(title="Broadcast QC Incident Commander")
 

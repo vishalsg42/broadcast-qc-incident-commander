@@ -291,7 +291,10 @@ pytest                                      #  ~4m   adds live Loki/Tempo
 
 ## The control room
 
-One screen. The judge never has to open a Grafana tab.
+One screen, so nothing about the diagnosis depends on knowing Grafana.
+
+But the Grafana is real, and it is worth opening. Everything the control room
+shows was written there by the pipeline and read back out of it — see below.
 
 SMPTE 75% colour bars form the progress spine — the asset takes exactly seven
 steps here (three pipeline stages, four investigation phases) and 75% bars have
@@ -301,6 +304,68 @@ drawn, because that is the instrument an engineer reads. The allowlist stays on
 screen throughout, so the constraint is visible rather than asserted at the end.
 
 ---
+
+
+
+## What a run costs
+
+Measured, not estimated — full loop including three real ffmpeg transcodes, the
+differential experiment, telemetry ingestion, repair and write-back.
+
+| Reasoner | Median wall clock | Model calls |
+|---|---|---|
+| `scripted` | **42s** | 0 — deterministic stand-in |
+| `agentic` | **59s** | 7 (bounded at 14) |
+
+The agent costs about seventeen seconds and seven Gemini 2.5 Flash calls more
+than the fixed sequence, and it decides its own path. Most of both figures is
+ffmpeg and Grafana Cloud ingestion, not the model.
+
+The call budget is a hard bound, not a hope: `RunConfig(max_llm_calls=14)`, and
+exhausting it ends the investigation with an escalation rather than a truncated
+answer. The experiment is capped at two runs, because it is the only tool that
+spends real CPU.
+
+## What is in Grafana
+
+The pipeline writes to Grafana Cloud and the agent reads back from it through the
+**official Grafana MCP server**, restricted to a read-only allowlist. Nothing in
+the investigation comes from process memory.
+
+Install the dashboard into your own stack:
+
+```bash
+python scripts/provision_dashboard.py
+```
+
+It imports `grafana/dashboard.json` and then **runs each panel's query and
+reports whether real data came back** — an empty panel and a broken query look
+identical in a screenshot, so the script distinguishes them.
+
+| Where | What is there |
+|---|---|
+| **Loki** | One line per stage per delivery: `qc_stage`, `qc_verdict`, `qc_integrated_lufs`, `qc_true_peak_dbtp`, `qc_black_interval_count`, `qc_preset_id`, `qc_preset_version` |
+| **Tempo** | `delivery.run` as root with a `stage.*` child per stage. The stage spans carry the attribution: `qc.preset_id`, `qc.preset_version`, `qc.preset_changed_at`, `qc.preset_changed_by`, `qc.preset_change_ticket`, `qc.preset_approved_by` |
+| **Annotations** | One per completed repair, tagged `qc` |
+| **IRM** | One incident per blocked delivery |
+
+To look yourself, in Explore:
+
+```logql
+{service_name="qc-pipeline"} | qc_run_id="<run id>"
+```
+
+```traceql
+{ .qc.run_id="<run id>" }
+```
+
+Note that `service_name` is the only stream label — everything else is structured
+metadata and needs a `|` filter. A stack with several Loki datasources will
+default to the wrong one; pick the one with `logs` in its name.
+
+The trace is the view worth looking at. Open a `stage.package` span and the
+answer to *which configuration did this, and who changed it* is sitting in the
+span attributes.
 
 ## Stack
 

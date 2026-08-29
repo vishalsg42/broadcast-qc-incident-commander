@@ -53,6 +53,15 @@ pipeline/
 agent/
   evidence.py     evidence ledger, structured claims, citation validator,
                   action allowlist validation
+  grafana.py      READ-only Loki/Tempo via the datasource proxy
+  annotations.py  WRITE side, separate credential. Never used mid-investigation
+  investigator.py the fixed four-phase topology
+  reasoner.py     the model-facing surface: record_evidence(finding, supports)
+  conclusion.py   claim assembly + the deterministic adversarial candidates
+server/
+  app.py          FastAPI: POST /api/runs then GET .../events (SSE)
+  orchestrator.py run state machine; approval is a separate request
+ui/               Next.js 15 + Tailwind 4 + TanStack Query/Table
 tests/            pytest. Integration tests use real media and real ffmpeg.
 scripts/
   make_fixtures.sh    generates reproducible test media
@@ -75,6 +84,10 @@ python scripts/demo.py --fixture fault        # block -> investigate -> repair
 python scripts/demo.py --fixture source-bad   # escalates, proposes NO repair
 python scripts/demo.py --fixture clean        # no investigation, no action
 python scripts/demo.py --reasoner gemini      # same loop, model writes findings
+
+# control room (two processes)
+uvicorn server.app:app --port 8080            # API + SSE
+cd ui && npm run dev                          # Next.js on :3001, proxies /api
 python -m pipeline.qc media/master_good.mp4
 python -m pipeline.policy media/master_hot.mp4
 python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault

@@ -85,6 +85,7 @@ python scripts/demo.py --fixture source-bad   # escalates, proposes NO repair
 python scripts/demo.py --fixture clean        # no investigation, no action
 python scripts/demo.py --reasoner gemini      # same loop, model writes findings
 python scripts/evaluate.py --runs 5           # regenerate docs/RESULTS.md
+python scripts/check_grafana.py               # verify BOTH Grafana credentials
 
 # control room (two processes)
 uvicorn server.app:app --port 8080            # API + SSE

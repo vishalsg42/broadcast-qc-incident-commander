@@ -119,11 +119,31 @@ def main() -> int:
             try:
                 decoded = base64.b64decode(value).decode()
                 instance = decoded.split(":", 1)[0]
-                print(f"{OK}Authorization present — instance id {instance}")
+                print(f"{OK}Authorization decodes — instance id {instance}")
             except Exception:
-                print(
-                    f"{WARN}Authorization present but not decodable base64 — check the value"
+                print(f"{BAD}Authorization is not decodable base64")
+                problems.append(
+                    "OTEL_EXPORTER_OTLP_HEADERS looks malformed. The value contains a "
+                    "SPACE, so it must be QUOTED in .env or the shell truncates it at "
+                    "'Basic' and the credential is silently dropped."
                 )
+                instance = None
+
+            # Checking the string is not enough - it looked correct while the
+            # shell was truncating it, and the gateway answered 'no credentials
+            # provided'. Actually post, so a false green is impossible.
+            if instance:
+                status, body = _probe_otlp(endpoint, headers)
+                if status == 200:
+                    print(f"{OK}gateway accepted a test payload (HTTP 200)")
+                elif status == 401:
+                    print(f"{BAD}gateway rejected the credential — HTTP 401: {body}")
+                    problems.append(
+                        "OTLP auth failed. If the body says 'no credentials provided', "
+                        "the header is being truncated: QUOTE the value in .env."
+                    )
+                else:
+                    print(f"{WARN}gateway returned HTTP {status}: {body}")
         if endpoint and "otlp" not in endpoint:
             print(f"{WARN}endpoint has no /otlp path; Cloud usually ends in /otlp")
     else:
@@ -151,6 +171,24 @@ def main() -> int:
         print(f"{WARN}IRM — {incident.detail}")
 
     return report(problems)
+
+
+def _probe_otlp(endpoint: str, headers: str) -> tuple[int, str]:
+    """POST an empty payload to the OTLP gateway to prove the credential works."""
+    import urllib3
+
+    auth = headers.split("=", 1)[1] if headers.startswith("Authorization=") else headers
+    try:
+        resp = urllib3.PoolManager().request(
+            "POST",
+            f"{endpoint.rstrip('/')}/v1/traces",
+            body=b'{"resourceSpans":[]}',
+            headers={"Content-Type": "application/json", "Authorization": auth},
+            timeout=15,
+        )
+    except Exception as exc:
+        return 0, f"{type(exc).__name__}: {exc}"
+    return resp.status, resp.data.decode(errors="replace")[:160]
 
 
 def _pick(datasources: list[dict], kind: str, *, prefer: tuple, avoid: tuple) -> str | None:

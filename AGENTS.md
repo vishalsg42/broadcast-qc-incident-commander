@@ -158,6 +158,14 @@ python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
   aborted invocation rather than a retryable response. Return
   `{"ok": False, "error": ...}` — see `safe_record_interpretation`.
 - **`gcloud config configurations` does not isolate ADC.** Use `CLOUDSDK_CONFIG`.
+- **Quote `OTEL_EXPORTER_OTLP_HEADERS` in `.env`.** Its value contains a space,
+  so an unquoted line is truncated by the shell at `Basic` and the credential
+  never leaves the process. Grafana answers `401 no credentials provided`,
+  which looks like a bad token rather than a quoting bug.
+- **A Grafana Cloud stack has SEVERAL Loki datasources** (`-logs`,
+  `-alert-state-history`, `-usage-insights`). Picking the first match queries
+  the wrong one and returns nothing. Use `scripts/check_grafana.py`, which
+  prints every candidate and marks the choice.
 - **ADK 2.8 exposes the generated tool schema as `parameters_json_schema`**, not
   the older `parameters` field, which is `None`. ADK also flags this as
   EXPERIMENTAL (`JSON_SCHEMA_FOR_FUNC_DECL`), so re-run

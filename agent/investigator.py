@@ -186,6 +186,12 @@ class Investigator:
             # eight months ago.
             "recently_changed": _changed_recently(changed_at),
             "days_since_change": _days_since(changed_at),
+            # Read back off the SPAN, not the preset file. The file says what
+            # the preset is now; the span says what actually ran. If a preset
+            # were edited after the run, only the span would still be right.
+            "preset_changed_by": target.attributes.get("qc.preset_changed_by"),
+            "preset_change_ticket": target.attributes.get("qc.preset_change_ticket"),
+            "preset_approved_by": target.attributes.get("qc.preset_approved_by"),
             "sibling_stages": [
                 {
                     "stage": s.attributes.get("qc.stage"),

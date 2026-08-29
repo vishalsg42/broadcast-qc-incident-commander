@@ -42,6 +42,14 @@ export interface TraceEvent {
   preset_id: string
   preset_version: number
   preset_changed_at: string
+  /**
+   * Change provenance, read back off the trace span. Nullable because a preset
+   * with no recorded provenance is a real state worth reporting honestly.
+   */
+  preset_changed_by: string | null
+  preset_change_ticket: string | null
+  preset_approved_by: string | null
+  days_since_change: number | null
 }
 
 export interface RefusalEvent {

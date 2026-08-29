@@ -86,6 +86,24 @@ export function AttributionPanel({ trace }: { trace: TraceEvent | null }) {
             <Row label="Stage" value={trace.stage} />
             <Row label="Trace" value={trace.trace_id.slice(0, 16)} />
           </dl>
+
+          {/*
+            A delivery preset change is a controlled change, so the incident
+            conversation goes here next: who changed it, under what ticket, and
+            who signed it off. Absent fields say "not recorded" rather than
+            being hidden - the gap is itself the finding.
+          */}
+          <div className="mt-3 border-t border-rule pt-3">
+            <span className="legend">Change record</span>
+            <dl className="mt-2 space-y-1 text-[0.8125rem]">
+              <Row label="By" value={trace.preset_changed_by ?? "not recorded"} />
+              <Row label="Ticket" value={trace.preset_change_ticket ?? "not recorded"} />
+              <Row
+                label="Approved"
+                value={trace.preset_approved_by ?? "no approval recorded"}
+              />
+            </dl>
+          </div>
         </div>
       ) : (
         <p className="mt-2 text-sm text-legend">

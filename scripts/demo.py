@@ -139,9 +139,11 @@ def main() -> int:
     failing = divergence.summary["first_failing_stage"]
     preset_id = preset_version = changed_at = cause_detail = None
     recently_changed = None
+    actor_summary: dict = {}
 
     if baseline.summary["source_in_spec"] and failing:
         actor = inv.gather_actor(failing)
+        actor_summary = actor.summary
         preset_id = actor.summary["preset_id"]
         preset_version = actor.summary["preset_version"]
         changed_at = actor.summary["preset_changed_at"]
@@ -180,6 +182,9 @@ def main() -> int:
         preset_version=preset_version,
         preset_changed_at=changed_at,
         recently_changed=recently_changed,
+        changed_by=actor_summary.get("preset_changed_by"),
+        change_ticket=actor_summary.get("preset_change_ticket"),
+        approved_by=actor_summary.get("preset_approved_by"),
         cause_detail=cause_detail,
         delivery_profile_id=profile.id,
     )

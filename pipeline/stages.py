@@ -40,6 +40,13 @@ class Preset:
     description: str
     audio_filter: str
     stage: str
+    # Change provenance. A delivery preset change is a controlled change, so
+    # "who, under what ticket, approved by whom" travels with the version.
+    # Optional because a preset with no recorded provenance is a real state -
+    # and reporting that gap honestly beats inventing a value for it.
+    changed_by: str | None = None
+    change_ticket: str | None = None
+    approved_by: str | None = None
 
 
 # Ingest admits the source unchanged; it exists so the source is measured
@@ -51,6 +58,9 @@ INGEST_PRESET = Preset(
     description="Admit source unchanged; measure as received",
     audio_filter="anull",
     stage=INGEST,
+    changed_by="system",
+    change_ticket="n/a",
+    approved_by="system",
 )
 
 
@@ -66,6 +76,9 @@ class PresetLibrary:
                     description=e.get("description", "").strip(),
                     audio_filter=e["audio_filter"],
                     stage=stage,
+                    changed_by=e.get("changed_by"),
+                    change_ticket=e.get("change_ticket"),
+                    approved_by=e.get("approved_by"),
                 )
                 for e in entries
             ]
@@ -116,6 +129,9 @@ class StageResult:
             "preset_id": self.preset.id,
             "preset_version": self.preset.version,
             "preset_changed_at": self.preset.changed_at,
+            "preset_changed_by": self.preset.changed_by,
+            "preset_change_ticket": self.preset.change_ticket,
+            "preset_approved_by": self.preset.approved_by,
             "span_id": self.span_id,
             "input_path": self.input_path,
             "output_path": self.output_path,
@@ -235,6 +251,9 @@ def _execute_stage(
         preset_id=preset.id,
         preset_version=preset.version,
         preset_changed_at=preset.changed_at,
+        preset_changed_by=preset.changed_by,
+        preset_change_ticket=preset.change_ticket,
+        preset_approved_by=preset.approved_by,
         run_id=run.run_id,
         asset_id=run.asset_id,
     ):

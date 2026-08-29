@@ -178,12 +178,19 @@ def stage_span(
     preset_changed_at: str,
     run_id: str,
     asset_id: str,
+    preset_changed_by: str | None = None,
+    preset_change_ticket: str | None = None,
+    preset_approved_by: str | None = None,
 ) -> Iterator[Any]:
     """One span per pipeline stage, carrying the preset that produced it.
 
     `preset_version` and `preset_changed_at` are the payoff of the entire demo -
     they are what turns "the audio is wrong" into "preset pkg_h264_v7, changed at
     14:02, remapped the channels". Easiest thing in the project to forget.
+
+    The provenance attributes answer the question that always comes next: who
+    changed it, under what ticket, and who approved it. They are unbounded
+    values on the span, never promoted to metric labels.
     """
     if not enabled():
         yield None
@@ -194,6 +201,15 @@ def stage_span(
         span.set_attribute("qc.preset_id", preset_id)
         span.set_attribute("qc.preset_version", preset_version)
         span.set_attribute("qc.preset_changed_at", preset_changed_at)
+        # Provenance. Omitted rather than defaulted when absent, so a missing
+        # attribute means "not recorded" instead of a fabricated value.
+        for key, value in (
+            ("qc.preset_changed_by", preset_changed_by),
+            ("qc.preset_change_ticket", preset_change_ticket),
+            ("qc.preset_approved_by", preset_approved_by),
+        ):
+            if value is not None:
+                span.set_attribute(key, value)
         # Unbounded values: useful on the span, never promoted to a label.
         span.set_attribute("qc.run_id", run_id)
         span.set_attribute("qc.asset_id", asset_id)

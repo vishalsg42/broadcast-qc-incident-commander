@@ -494,3 +494,43 @@ returned 403 and the page looked dead. It went unnoticed because every previous
 production run was driven from a script, never from the hosted page. The hook
 now forwards the token from the address bar, and a 403 says the link is missing
 its token rather than showing a bare status code.
+
+## D26 — Change provenance: the question after the version
+
+Attribution to a preset version is this project's differentiator, but the domain
+review was blunt about where it falls short:
+
+> "The very first question in the room after 'preset v7, changed 14:02' is who
+> changed it, and was it signed off. A delivery preset change is a controlled
+> change."
+
+So `presets.yaml` now carries `changed_by`, `change_ticket` and `approved_by`
+alongside `changed_at`. Three strings, no new subsystem.
+
+**They ride the trace span, and the ACTOR phase reads them back off the span —
+not off the preset file.** The file says what a preset is *now*; the span says
+what actually *ran*. If a preset were edited after a run, only the span would
+still be right, and provenance read from the file would quietly describe a
+different change than the one under investigation.
+
+Three deliberate choices:
+
+**Absent fields are reported, not hidden.** A preset with no recorded approval
+renders "no approval recorded" and claims "with no approval recorded". An
+uncontrolled change to a delivery preset is a finding; a blank row is not.
+
+**Provenance is a separate claim from root cause.** Who changed it explains who
+to talk to; it never explains why the asset failed. Fusing them would let an
+audit trail masquerade as a causal explanation.
+
+**The hero preset was properly approved and still shipped a defect.** `CHG-4471`
+went through change control. That is the honest case and the more useful one:
+approval is an audit trail, not a technical review, which is exactly why
+attribution must be measured from telemetry rather than inferred from process.
+
+**A fixture bug this surfaced:** `pkg_h264_v7` was timestamped `14:02Z` while the
+run executed at `09:06Z`, so `days_since_change` came back **negative** — a
+preset changed in the future. Moved to `04:02Z`. Note that `RECENT_CHANGE_DAYS`
+is 7, so a run more than a week after that date correctly reports "preset
+SELECTION rather than a preset change" instead — the second branch, working as
+designed.

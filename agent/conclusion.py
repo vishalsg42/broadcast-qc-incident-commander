@@ -61,6 +61,9 @@ def build_conclusion(
     cause_detail: str | None,
     delivery_profile_id: str,
     recently_changed: bool | None = None,
+    changed_by: str | None = None,
+    change_ticket: str | None = None,
+    approved_by: str | None = None,
     confidence: str = "high",
 ) -> Conclusion:
     """Assemble claims from what the phases established.
@@ -155,7 +158,30 @@ def build_conclusion(
                     confidence="medium",
                 )
             )
-        elif recently_changed is False:
+        # Who changed it and under what authority. This is where an incident
+        # conversation actually goes next, and it is a separate observation from
+        # the defect itself - provenance explains WHO to talk to, never WHY the
+        # asset failed. Stated only when the trace carried it.
+        if changed_by or change_ticket:
+            attribution = f"{preset_id} v{preset_version} was changed by "
+            attribution += changed_by or "an unrecorded author"
+            if change_ticket:
+                attribution += f" under {change_ticket}"
+            attribution += (
+                f", approved by {approved_by}"
+                if approved_by
+                else ", with no approval recorded"
+            )
+            claims.append(
+                Claim(
+                    claim_type=ClaimType.ACTOR_PRESET,
+                    claim_value=attribution,
+                    supporting_step_ids=[s for s in [actor] if s],
+                    confidence="high",
+                )
+            )
+
+        if recently_changed is False:
             claims.append(
                 Claim(
                     claim_type=ClaimType.ACTOR_PRESET,

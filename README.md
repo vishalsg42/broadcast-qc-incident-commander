@@ -26,7 +26,8 @@ The interesting failure is not the obvious one. Here, the normaliser does its jo
 | normalize | `norm_ebu_v3` | **−22.8 LUFS** | PASS — normalisation was correct |
 | package | `pkg_h264_v7` | **−16.8 LUFS** | **BLOCKED** |
 
-`pkg_h264_v7` (changed `2026-08-29T14:02:00Z`) applies
+`pkg_h264_v7` (changed `2026-08-29T04:02:00Z` by `d.okonkwo` under `CHG-4471`,
+approved by `j.reyes`) applies
 `pan=stereo|c0=c0+c1|c1=c0+c1` — an unconditional downmix that sums an
 already-stereo bed into both output channels. You cannot guess this from the
 failing number: the source was fine and the normaliser was fine. The
@@ -144,6 +145,26 @@ two different quantities. It would produce a confident number that is wrong by
 an unknown amount, which in a delivery pipeline is worse than no number at all.
 The same asset returns BLOCKED under R128 and A/85, and UNMEASURABLE under
 Netflix, from one measurement.
+
+### Attribution does not stop at the version
+
+"Preset `pkg_h264_v7` v7, changed 04:02" is where most tools would stop, and it
+is not where the conversation stops in a real facility. A delivery preset change
+is a **controlled change**, so the next questions are who made it, under what
+ticket, and who signed it off. Those three fields ride the trace span beside the
+version and come back out of the ACTOR phase as a cited claim:
+
+> `pkg_h264_v7` v7 was changed by `d.okonkwo` under `CHG-4471`, approved by
+> `j.reyes`
+
+Provenance answers **who to talk to**, never **why the asset failed** — those are
+separate claims, from separate observations. And a preset with nothing recorded
+reports "no approval recorded" rather than a blank field, because the missing
+audit trail is itself the finding.
+
+Note that `CHG-4471` was properly approved and still shipped a defect. Change
+control is an audit trail, not a technical review — which is precisely why
+attribution has to be measured from telemetry rather than inferred from process.
 
 Real rejection causes, in rough order of frequency: audio track layout and
 channel mapping, caption conformance, metadata, timecode discontinuity, wrapper

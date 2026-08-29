@@ -339,3 +339,40 @@ pre-commit run and fatal for a per-save one.
 **Trap worth recording.** Two suites running concurrently against the same Docker
 stack and ffmpeg look exactly like a hang. Kill stray runs before diagnosing a
 "regression".
+
+
+---
+
+## D20 — `output_schema` + tools works here, and we still do not use it
+
+**Measured, not assumed.** On `gemini-2.5-flash` via Vertex AI with ADK 2.8.0,
+an `LlmAgent` carrying both `tools` and `output_schema` calls the tool *and*
+honours the schema. That contradicts the general documentation warning, which is
+why the probe exists rather than a guess.
+
+**The design does not change.** Structure was never the requirement — provenance
+was. `record_evidence` stays because it keeps `phase`, `query_used`,
+`query_hash` and `raw_result_ref` under the controller's control. An
+`output_schema` would let the model emit a well-shaped object describing a query
+it never ran.
+
+**Also measured:** ADK flags the generated schema as experimental
+(`JSON_SCHEMA_FOR_FUNC_DECL`) and exposes it as `parameters_json_schema`, not
+the older `parameters` field. `tests/test_adk_contract.py` pins the model-facing
+surface so an ADK bump cannot widen it silently.
+
+---
+
+## D21 — Gemini's prose is thinner than the scripted stand-in; the conclusion is not
+
+Running the same fixture on both reasoners, Gemini's ACTOR finding read *"The
+failing package stage ran with preset version 7"* where the scripted version
+names `pkg_h264_v7` and its `changed_at`.
+
+**The conclusion was identical either way**, because `build_conclusion` draws on
+the controller-bound phase summary rather than the model's sentence. This is the
+provenance design absorbing a weaker model output without the attribution
+degrading — the intended behaviour, observed rather than argued.
+
+A sharper ACTOR prompt would improve the on-screen narration. It would not
+change what the system concludes, which is the point.

@@ -162,9 +162,12 @@ the logs are two disconnected piles and there is no investigation to run.
 
 ## Results
 
-Three fixtures, run repeatedly through the real path. The two negative cases
-matter more than the happy one: an agent that only ever finds a fault is a
-puppet.
+Three fixtures, three runs each, **on Gemini 2.5 Flash via Vertex AI** — the
+model writing every finding. The two negative cases matter more than the happy
+one: an agent that only ever finds a fault is a puppet.
+
+**9/9 correct.** Regenerate with `python scripts/evaluate.py --runs 3
+--reasoner gemini`; the full report is in [`docs/RESULTS.md`](docs/RESULTS.md).
 
 | Fixture | Expected | Result |
 |---|---|---|

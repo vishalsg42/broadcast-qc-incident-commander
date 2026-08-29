@@ -50,6 +50,7 @@ class _Telemetry:
     tracer_provider: TracerProvider
     logger_provider: LoggerProvider
     endpoint: str
+    handler: logging.Handler | None = None
 
 
 def _endpoint() -> str | None:
@@ -73,7 +74,12 @@ def init(endpoint: str | None = None, *, service_name: str = SERVICE_NAME) -> bo
     tracer_provider.add_span_processor(
         BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces"))
     )
-    trace.set_tracer_provider(tracer_provider)
+    # OTel permits set_tracer_provider ONCE per process, and warns on any repeat.
+    # A long-lived server re-inits per run, so we only set the global the first
+    # time; span creation goes through tracer() and this module's own provider,
+    # which stays correct across re-inits either way.
+    if not isinstance(trace.get_tracer_provider(), TracerProvider):
+        trace.set_tracer_provider(tracer_provider)
 
     logger_provider = LoggerProvider(resource=resource)
     logger_provider.add_log_record_processor(
@@ -86,7 +92,7 @@ def init(endpoint: str | None = None, *, service_name: str = SERVICE_NAME) -> bo
     pipeline_logger.addHandler(handler)
     pipeline_logger.propagate = False
 
-    _state = _Telemetry(tracer_provider, logger_provider, endpoint)
+    _state = _Telemetry(tracer_provider, logger_provider, endpoint, handler)
     return True
 
 
@@ -125,6 +131,11 @@ def shutdown() -> None:
     global _state
     if _state is None:
         return
+    # Detach the handler before shutting its provider down. Without this a
+    # server that re-inits per run accumulates handlers pointing at dead
+    # providers, and log export degrades silently after the first run.
+    if _state.handler is not None:
+        logging.getLogger(LOGGER_NAME).removeHandler(_state.handler)
     _state.tracer_provider.shutdown()
     _state.logger_provider.shutdown()
     _state = None

@@ -87,3 +87,43 @@ class TestDisabledByDefault:
             verdict="PASS",
             measurements={},
         )
+
+
+class TestRepeatedInit:
+    """A long-lived server re-inits telemetry once per run.
+
+    Two things go wrong silently if this is not handled: OTel refuses a second
+    `set_tracer_provider` (warning only), and every `init()` used to append
+    another logging handler, so handlers accumulated pointing at providers that
+    had already been shut down. Log export then degrades after the first run
+    with nothing in the output to explain it.
+    """
+
+    def test_handlers_do_not_accumulate(self):
+        import logging
+
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        log = logging.getLogger(telemetry.LOGGER_NAME)
+        before = len(log.handlers)
+        for _ in range(3):
+            telemetry.init_for_test(InMemorySpanExporter())
+            telemetry.shutdown()
+        assert len(log.handlers) == before
+
+    def test_each_cycle_produces_its_own_trace(self):
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        trace_ids = set()
+        for i in range(3):
+            exporter = InMemorySpanExporter()
+            telemetry.init_for_test(exporter)
+            with telemetry.run_span(run_id=f"r{i}", asset_id="a", source_path="p"):
+                pass
+            trace_ids.update(s.context.trace_id for s in exporter.get_finished_spans())
+            telemetry.shutdown()
+        assert len(trace_ids) == 3, "re-init must not reuse a trace"

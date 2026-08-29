@@ -1,0 +1,18 @@
+# gcloud falls back to .gitignore when this file is absent, which silently
+# excluded media/*.mp4 from the build context and produced a container with no
+# fixtures. Being explicit here decouples "not in git" from "not in the build".
+.git/
+.gcloud/
+.venv/
+.env
+deploy.env.yaml
+.demo_token
+out/
+ui/node_modules/
+ui/dist/
+ui/.next/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+media/*.mp4

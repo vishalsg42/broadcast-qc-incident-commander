@@ -38,8 +38,17 @@ RUN pip install --no-cache-dir -r requirements-lock.txt
 COPY pipeline/ ./pipeline/
 COPY agent/ ./agent/
 COPY server/ ./server/
-COPY media/ ./media/
 COPY --from=ui /ui/dist ./ui/dist
+
+# Generate the fixtures rather than shipping them.
+#
+# They are reproducible by construction, so building them here keeps ~36MB of
+# media out of every build context and makes it impossible for the image to be
+# missing them. `gcloud run deploy --source .` falls back to .gitignore when no
+# .gcloudignore exists, and .gitignore excludes media/*.mp4 - so shipping them
+# silently produced a container with no media at all.
+COPY scripts/make_fixtures.sh ./scripts/
+RUN chmod +x scripts/make_fixtures.sh && ./scripts/make_fixtures.sh && ls -la media/
 
 # Cloud Run's filesystem is read-only apart from /tmp, and /tmp is tmpfs that
 # counts against the instance's memory. Pipeline outputs go there deliberately:

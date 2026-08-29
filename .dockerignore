@@ -13,3 +13,4 @@ __pycache__/
 docs/
 tests/
 scripts/
+!scripts/make_fixtures.sh

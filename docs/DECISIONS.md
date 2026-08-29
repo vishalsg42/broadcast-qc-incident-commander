@@ -426,3 +426,44 @@ in the Grafana UI provisioned it, and incident creation has worked since.
 The lesson kept in code: a raw foreign-key error surfaced verbatim reads like
 our bug. `create_incident` now recognises that signature and says what is
 actually wrong and how to fix it.
+
+
+---
+
+## D24 — Deploying to Cloud Run, and the four bugs it exposed
+
+Containerising found four defects that local development could not, because
+each depends on an environment property a laptop does not have.
+
+**1. A missing runtime dependency.** `opentelemetry-exporter-otlp-proto-http`
+had been pip-installed after `requirements-lock.txt` was frozen and never
+re-frozen. Worked locally forever; `ModuleNotFoundError` in any clean
+environment.
+
+**2. A hardcoded output path.** `OUT_DIR` pointed at `ROOT/out`, which cannot be
+written on Cloud Run's read-only filesystem. Now `QCIC_OUT_DIR`, defaulting to
+`/tmp` in the image.
+
+**3. An unbounded SSE stream.** The generator looped until an `end` event, so an
+abandoned connection held a FastAPI threadpool thread forever. A handful of
+closed tabs exhausted the pool and the service stopped answering entirely — a
+self-inflicted denial of service on a public URL. Now hard-capped.
+
+**4. Fixtures never reached the image.** `gcloud run deploy --source .` falls
+back to `.gitignore` when no `.gcloudignore` is present, and `.gitignore`
+excludes `media/*.mp4`. The container deployed cleanly and failed at the first
+ffmpeg call with "source not found". Fixed by generating fixtures during the
+image build — reproducible by construction, and impossible to omit.
+
+**Also corrected in flight:** `--max-instances 2` was wrong. Run state and the
+approval handshake are in process memory, so a second instance could receive an
+approval for a run it does not know. Pinned to 1.
+
+**And a fail-fast.** With telemetry unconfigured the service used to block
+correctly, then wait the full 300s ingestion ceiling and report "0 lines" —
+which reads as a Grafana outage rather than a missing environment variable. It
+now refuses to start the run and names the variable.
+
+Verified in production: real Gemini via Vertex AI, real Grafana Cloud, real
+ffmpeg. Telemetry queryable in **1.0s** thanks to the boot warm-up, four
+refusals, approval, repair, re-validation, annotation and IRM incident.

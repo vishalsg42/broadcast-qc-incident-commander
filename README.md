@@ -201,6 +201,30 @@ misbehaving:
 
 ---
 
+## Live
+
+**https://qc-incident-commander-948380890267.us-central1.run.app**
+
+Starting a run needs a demo token (`?token=…`): every run costs ffmpeg CPU and
+Vertex tokens, so a public endpoint that starts work is a spend vector. Reading
+is open, so the page loads for anyone.
+
+Deployment notes worth knowing:
+
+- **One container, one origin.** FastAPI serves both the API and the statically
+  exported UI — no second service, no reverse proxy, no CORS preflight, and no
+  cross-origin `EventSource`.
+- **`--max-instances 1`, deliberately.** Run state and the approval handshake
+  live in process memory, so a second instance could receive an approval for a
+  run it has never heard of. Correctness over scale for a demo.
+- **A warm-up run on boot.** Grafana Cloud's first write to a new Loki stream
+  takes 90s+ while the stream is created; later writes land in under a second.
+  Without it, the first visitor after a cold start waits on ingestion.
+- **Fixtures are generated at image build time**, not shipped. `gcloud run
+  deploy --source .` falls back to `.gitignore` when no `.gcloudignore` exists,
+  and `.gitignore` excludes `media/*.mp4` — which silently produced a container
+  with no media at all.
+
 ## Running it
 
 ```bash

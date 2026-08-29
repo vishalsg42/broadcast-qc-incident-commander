@@ -1,6 +1,15 @@
 # Results
 
-`3` runs per fixture, reasoner `gemini`, 3.8 min total.
+`3` runs per fixture, 4.3 min total.
+
+| | |
+|---|---|
+| Reasoner | `gemini` — gemini-2.5-flash via Vertex AI |
+| Telemetry backend | Grafana Cloud |
+| Measurement | real ffmpeg (`ebur128`, `blackdetect`) |
+
+Results are only meaningful alongside what they ran against, so the
+backend is recorded rather than assumed.
 
 Each fixture answers a different question, so the denominators are kept
 separate rather than collapsed into one misleading accuracy figure.

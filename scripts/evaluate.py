@@ -217,11 +217,34 @@ def main() -> int:
 
 
 def render(tallies: dict[str, Tally], args, elapsed: float) -> str:
+    import os
+
+    grafana = os.environ.get("GRAFANA_URL", "http://localhost:3000")
+    backend = "Grafana Cloud" if "grafana.net" in grafana else "local Grafana (otel-lgtm)"
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    via = (
+        "Vertex AI" if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI") == "TRUE" else "Gemini API"
+    )
+
     lines = [
         "# Results",
         "",
-        f"`{args.runs}` runs per fixture, reasoner `{args.reasoner}`, "
-        f"{elapsed / 60:.1f} min total.",
+        f"`{args.runs}` runs per fixture, {elapsed / 60:.1f} min total.",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| Reasoner | `{args.reasoner}`"
+        + (
+            f" — {model} via {via}"
+            if args.reasoner == "gemini"
+            else " (deterministic stand-in)"
+        )
+        + " |",
+        f"| Telemetry backend | {backend} |",
+        "| Measurement | real ffmpeg (`ebur128`, `blackdetect`) |",
+        "",
+        "Results are only meaningful alongside what they ran against, so the",
+        "backend is recorded rather than assumed.",
         "",
         "Each fixture answers a different question, so the denominators are kept",
         "separate rather than collapsed into one misleading accuracy figure.",

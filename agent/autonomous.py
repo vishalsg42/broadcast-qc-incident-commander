@@ -88,6 +88,17 @@ MAX_CONCLUDE_ATTEMPTS = 5
 # Running ffmpeg twice is the most expensive thing the agent can ask for.
 MAX_EXPERIMENTS = 2
 
+# Hard ceiling on rows any query may return, clamped by the controller whatever
+# the model asks for. A one-hour window over a busy pipeline is thousands of log
+# lines, and the whole payload would land in the context: slow on camera, and
+# the needle lost in the haystack.
+MAX_QUERY_ROWS = 25
+
+# Ceiling on what a single tool result contributes to the context. The LEDGER
+# still holds the full payload - that is the audit trail and it is not
+# negotiable - but the model is shown a bounded view of it.
+MAX_TOOL_CHARS = 6000
+
 # Which evidence a claim is allowed to rest on. This is what turns the widened
 # Phase enum into a constraint: without it, an EXPERIMENT claim asserting a
 # measured delta can cite a preset-definition lookup and validate cleanly, with
@@ -445,14 +456,11 @@ class AutonomousInvestigator:
         model can ever cite are ids it caused to exist by running a real tool.
         """
         payload = _as_dict(tool_response)
-        if payload.get("ok") is False:
+        failure = _failure_reason(payload)
+        if failure is not None:
             # A refused or failed tool is not evidence, so it mints nothing.
-            self.calls.append(
-                ToolCall(
-                    tool.name, _short(args), ok=False, error=str(payload.get("error"))[:300]
-                )
-            )
-            self._emit("tool_failed", tool=tool.name, error=str(payload.get("error"))[:200])
+            self.calls.append(ToolCall(tool.name, _short(args), ok=False, error=failure[:300]))
+            self._emit("tool_failed", tool=tool.name, error=failure[:200])
             return None
 
         # conclude() is a submission, not an observation - it must not become
@@ -481,7 +489,8 @@ class AutonomousInvestigator:
             phase=phase.value,
             summary=_summarise(payload),
         )
-        return {**payload, "step_id": pending.step_id}
+        # The ledger has the whole thing; the model gets a bounded view.
+        return {**_bounded(payload), "step_id": pending.step_id}
 
     # -- the loop ----------------------------------------------------------
 
@@ -692,6 +701,40 @@ def _is_unknown_tool(exc: BaseException) -> bool:
     return any(isinstance(e, ValueError) and "not found" in str(e) for e in _causes(exc))
 
 
+def _failure_reason(payload: dict) -> str | None:
+    """Why this tool call failed, or None if it succeeded.
+
+    THE LOCAL TOOLS AND THE MCP TOOLS FAIL DIFFERENTLY, and checking only one
+    shape is how a failed call became citable evidence. The local tools return
+    `{"ok": False, "error": ...}`. The MCP tools never return `ok` at all - they
+    return `{"content": [...], "isError": true}`, and ADK's own source carries a
+    helper for the isError/is_error spelling difference between MCP 1.x and 2.x.
+    Its graceful-error path returns `{"error": ...}` instead.
+
+    Left unchecked, an errored MCP call minted a step_id and was recorded as
+    SUPPORTING. Two failed calls clear the evidence floor, so an agent could
+    conclude from a pair of authentication errors and pass every validator: the
+    steps exist, and their phases are ones the claim may rest on. That is the
+    exact failure this module claims to prevent, arriving through the one door
+    nobody checked.
+    """
+    if payload.get("ok") is False:
+        return str(payload.get("error", "tool reported failure"))
+    if payload.get("isError") or payload.get("is_error"):
+        return _mcp_error_text(payload)
+    if "error" in payload:
+        return str(payload["error"])
+    return None
+
+
+def _mcp_error_text(payload: dict) -> str:
+    """Pull the message out of an MCP error result, which nests it in content."""
+    for block in payload.get("content") or []:
+        if isinstance(block, dict) and block.get("text"):
+            return str(block["text"])
+    return "the tool reported an error"
+
+
 def _as_dict(response) -> dict:
     """MCP tools return varied shapes; normalise without losing the content."""
     if isinstance(response, dict):
@@ -701,6 +744,28 @@ def _as_dict(response) -> dict:
             with contextlib.suppress(Exception):
                 return getattr(response, attr)()
     return {"result": response}
+
+
+def _bounded(payload: dict) -> dict:
+    """A view of a tool result that cannot blow out the context window.
+
+    The full payload is already in the ledger under its raw_result_ref, so
+    nothing is lost for audit. What the model sees is capped, and the cap is
+    announced rather than silently applied - a truncated result the model
+    believes is complete is worse than one it knows is partial.
+    """
+    text = json.dumps(payload, default=str)
+    if len(text) <= MAX_TOOL_CHARS:
+        return payload
+    return {
+        "truncated": True,
+        "note": (
+            f"This result was {len(text)} characters and has been cut to "
+            f"{MAX_TOOL_CHARS}. Narrow the query rather than assuming what is "
+            "missing."
+        ),
+        "partial_result": text[:MAX_TOOL_CHARS],
+    }
 
 
 def _short(args) -> dict:
@@ -719,6 +784,8 @@ def _summarise(payload: dict) -> str:
 
 __all__ = [
     "CLAIM_SOURCES",
+    "MAX_QUERY_ROWS",
+    "MAX_TOOL_CHARS",
     "build_prompt",
     "MAX_LLM_CALLS",
     "AutonomousInvestigator",

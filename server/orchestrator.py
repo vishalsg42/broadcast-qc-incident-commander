@@ -12,10 +12,12 @@ buys nothing a judge can see.
 
 from __future__ import annotations
 
+import contextlib
 import queue
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -46,6 +48,10 @@ from pipeline.policy import (
 )
 from pipeline.remediation import execute_repair
 from pipeline.stages import NORMALIZE, PACKAGE, PresetLibrary, run_pipeline
+
+# How many finished runs stay addressable for the UI to reconnect to.
+# Generous for a demo, bounded for an instance that never restarts.
+MAX_RETAINED_RUNS = 25
 
 ROOT = Path(__file__).resolve().parent.parent
 PROFILE_PATH = ROOT / "pipeline" / "profiles" / "ebu_r128.yaml"
@@ -109,10 +115,57 @@ class Orchestrator:
     def __init__(self, *, grafana_url: str = "http://localhost:3000", out_dir: str = "out"):
         self.grafana_url = grafana_url
         self.out_dir = out_dir
-        self._runs: dict[str, Run] = {}
+        # Bounded. Each Run holds an event queue and a conclusion, and a
+        # long-lived instance that never evicts them is a slow leak - the
+        # instance is pinned with min-instances=1, so "it restarts eventually"
+        # is not true here.
+        self._runs: OrderedDict[str, Run] = OrderedDict()
         self.profile = Profile.load(PROFILE_PATH)
         with PROFILE_PATH.open() as fh:
             self.allowlist = allowlist_from_profile(yaml.safe_load(fh))
+
+    # Statuses where a run is still doing something, or someone is still waiting
+    # on it. AWAITING_APPROVAL lasts up to five minutes, and evicting one leaves
+    # the approve button permanently returning 409 while the worker blocks for
+    # the full timeout.
+    ACTIVE_STATUSES = frozenset(
+        {Status.PENDING, Status.RUNNING, Status.AWAITING_APPROVAL, Status.REPAIRING}
+    )
+
+    def _evict_old_runs(self) -> None:
+        """Drop the oldest FINISHED runs, and their artefacts with them.
+
+        Two things get evicted together on purpose. The Run object is a few
+        kilobytes; the artefacts it left in out_dir are ~25MB per run, on a
+        filesystem that is RAM on Cloud Run and an instance pinned with
+        min-instances=1 that never restarts to clean itself up. Bounding the
+        dict and leaving the video behind would be bounding the wrong thing by
+        three orders of magnitude.
+        """
+        while len(self._runs) > MAX_RETAINED_RUNS:
+            victim = next(
+                (
+                    run_id
+                    for run_id, run in self._runs.items()
+                    if run.status not in self.ACTIVE_STATUSES
+                ),
+                None,
+            )
+            if victim is None:
+                # Everything retained is still live. Better to hold more than to
+                # strand a run someone is waiting to approve.
+                return
+            run = self._runs.pop(victim)
+            self._remove_artefacts(run)
+
+    def _remove_artefacts(self, run: Run) -> None:
+        """Delete what a finished run left on disk."""
+        if not run.pipeline_run_id:
+            return
+        for stale in Path(self.out_dir).glob(f"{run.pipeline_run_id}*"):
+            # missing_ok because /api/media may be streaming this file right now.
+            with contextlib.suppress(OSError):
+                stale.unlink(missing_ok=True)
 
     def get(self, run_id: str) -> Run | None:
         return self._runs.get(run_id)
@@ -129,6 +182,7 @@ class Orchestrator:
             raise ValueError(str(exc)) from exc
         run = Run(run_id=f"ui-{uuid.uuid4().hex[:10]}", fixture=fixture, profile_id=profile_id)
         self._runs[run.run_id] = run
+        self._evict_old_runs()
         threading.Thread(target=self._execute, args=(run, reasoner), daemon=True).start()
         return run
 
@@ -454,6 +508,28 @@ class Orchestrator:
             verdict=repair.verdict.status if repair.verdict else None,
         )
 
+        # A repair that did not clear the gate is not a completed run.
+        #
+        # The gate re-validates independently, which is the point - but nothing
+        # acted on the answer. A failed remediation wrote the same annotation,
+        # opened the same incident and ended DONE, leaving an operator to notice
+        # `resolved=false` in a stream of events.
+        #
+        # It escalates instead, and deliberately does NOT propose another
+        # automated fix: the first proposal was wrong about something, and
+        # guessing again with the same evidence is how an automated system
+        # burns an asset.
+        if not repair.resolved:
+            run.emit(
+                "escalated",
+                reason=(
+                    f"The approved repair did not clear the gate: "
+                    f"{repair.message}. The asset is unresolved and no further "
+                    "automated action will be proposed. A human needs to look "
+                    "at this."
+                ),
+            )
+
         # 7. write-back, last, with a separate credential
         writer = GrafanaWriter(WriterConfig.from_env())
         annotated = writer.annotate(
@@ -470,7 +546,10 @@ class Orchestrator:
             time_ms=int(time.time() * 1000),
         )
         incident = writer.create_incident(
-            title=f"Delivery blocked: {pr.asset_id} out of spec at {failing}"
+            title=(
+                f"Delivery blocked: {pr.asset_id} out of spec at {failing}"
+                + ("" if repair.resolved else " - REPAIR FAILED, needs a human")
+            )
         )
         run.emit(
             "written_back",
@@ -479,7 +558,10 @@ class Orchestrator:
             incident_ok=incident.ok,
             incident_detail=incident.detail,
         )
-        run.status = Status.DONE
+        # Unresolved is a distinct outcome from resolved, and the status says so.
+        run.status = Status.DONE if repair.resolved else Status.FAILED
+        if not repair.resolved:
+            run.error = f"repair did not clear the gate: {repair.message}"
 
     def _screen_refusals(self, run, ledger, allowlist):
         """Run the adversarial candidates through the production validator."""

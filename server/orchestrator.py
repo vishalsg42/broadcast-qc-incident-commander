@@ -122,7 +122,19 @@ class Orchestrator:
         run.emit("started", fixture=run.fixture, media=media)
 
         # 1. pipeline
-        telemetry.init()
+        #
+        # Fail fast if telemetry is not configured. The investigation queries
+        # back what the pipeline emits, so with export disabled the run does not
+        # error - it blocks correctly, then waits the full ingestion ceiling and
+        # times out five minutes later with "0 lines". That reads as a Grafana
+        # problem when it is a missing environment variable.
+        if not telemetry.init():
+            raise RuntimeError(
+                "Telemetry is not configured, so the investigation would have "
+                "nothing to query. Set OTEL_EXPORTER_OTLP_ENDPOINT (and, for "
+                "Grafana Cloud, a quoted OTEL_EXPORTER_OTLP_HEADERS carrying "
+                "Authorization=Basic <base64>)."
+            )
         try:
             pr = run_pipeline(
                 ROOT / "media" / media,

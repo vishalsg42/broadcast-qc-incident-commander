@@ -1,0 +1,15 @@
+.venv/
+.gcloud/
+.env
+.git/
+out/
+ui/node_modules/
+ui/dist/
+ui/.next/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+docs/
+tests/
+scripts/

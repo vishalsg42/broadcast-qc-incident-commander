@@ -20,7 +20,9 @@ fabricated references. It does not verify that the reasoning is sound.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
+import threading
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -100,7 +102,18 @@ class EvidenceLedger:
         self.run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
         self._steps: list[EvidenceStep] = []
         self._raw: dict[str, Any] = {}
-        self._pending: PendingObservation | None = None
+        # Keyed by step_id rather than a single slot. A single slot only works
+        # while the caller strictly alternates observe -> interpret; an agent
+        # that runs several tools before interpreting any of them would silently
+        # bind each finding to whichever observation happened to land last.
+        self._pending: dict[str, PendingObservation] = {}
+        # Independent of len(_steps), which only grows on interpretation. Deriving
+        # ids from it made consecutive observations collide on step-01 and
+        # overwrite each other's raw results.
+        self._counter = itertools.count(1)
+        # observe() and record_interpretation() mutate shared state, and ADK runs
+        # parallel tool calls through asyncio.gather - optionally on real threads.
+        self._lock = threading.Lock()
 
     # -- controller side ----------------------------------------------------
 
@@ -110,35 +123,55 @@ class EvidenceLedger:
         Called AFTER the query executes, so query_used cannot be a query that was
         never run.
         """
-        step_id = f"step-{len(self._steps) + 1:02d}"
-        ref = f"raw://{self.run_id}/{step_id}"
-        self._raw[ref] = raw_result
-        self._pending = PendingObservation(
-            step_id=step_id,
-            run_id=self.run_id,
-            phase=phase,
-            query_used=query,
-            query_hash=_hash(query),
-            raw_result_ref=ref,
-            raw_result=raw_result,
-        )
-        return self._pending
+        with self._lock:
+            step_id = f"step-{next(self._counter):02d}"
+            ref = f"raw://{self.run_id}/{step_id}"
+            self._raw[ref] = raw_result
+            pending = PendingObservation(
+                step_id=step_id,
+                run_id=self.run_id,
+                phase=phase,
+                query_used=query,
+                query_hash=_hash(query),
+                raw_result_ref=ref,
+                raw_result=raw_result,
+            )
+            self._pending[step_id] = pending
+            return pending
 
     # -- model side ---------------------------------------------------------
 
-    def record_interpretation(self, finding: str, supports: bool) -> EvidenceStep:
-        """Attach the model's reading to the current pending observation."""
-        if self._pending is None:
-            raise LedgerError("no pending observation to interpret")
-        step = EvidenceStep(
-            **self._pending.model_dump(exclude={"raw_result"}),
-            recorded_at=datetime.now(UTC),
-            finding=finding,
-            supports=supports,
-        )
-        self._steps.append(step)
-        self._pending = None
-        return step
+    def record_interpretation(
+        self, finding: str, supports: bool, *, step_id: str | None = None
+    ) -> EvidenceStep:
+        """Attach the model's reading to an observation the controller made.
+
+        `step_id` names which one. It is optional only so the strictly sequential
+        callers keep working, where "the one outstanding observation" is
+        unambiguous; anything running tools concurrently must name it, and is
+        refused here if it does not.
+        """
+        with self._lock:
+            if step_id is None:
+                if not self._pending:
+                    raise LedgerError("no pending observation to interpret")
+                if len(self._pending) > 1:
+                    raise LedgerError(
+                        f"{len(self._pending)} observations are awaiting interpretation; "
+                        "name one with step_id"
+                    )
+                step_id = next(iter(self._pending))
+            pending = self._pending.pop(step_id, None)
+            if pending is None:
+                raise LedgerError(f"no observation {step_id!r} awaiting interpretation")
+            step = EvidenceStep(
+                **pending.model_dump(exclude={"raw_result"}),
+                recorded_at=datetime.now(UTC),
+                finding=finding,
+                supports=supports,
+            )
+            self._steps.append(step)
+            return step
 
     # -- reads --------------------------------------------------------------
 

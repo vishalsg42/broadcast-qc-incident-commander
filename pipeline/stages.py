@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import yaml
@@ -65,6 +65,27 @@ INGEST_PRESET = Preset(
 )
 
 
+def _resolve_changed_at(entry: dict) -> str:
+    """Absolute timestamp for a preset change, or one computed from `changed_hours_ago`.
+
+    A hardcoded `changed_at` goes stale: the investigation reports whether a
+    preset changed within RECENT_CHANGE_DAYS, so a fixed date silently flips the
+    conclusion from "a recent change is a plausible trigger" to "this is preset
+    SELECTION" once that window passes. The demo would then tell a different
+    story than the one recorded, with no error to notice.
+
+    `changed_hours_ago` keeps the scenario stable whenever the demo is run. It is
+    a fixture affordance and is documented as one - real deployments carry real
+    timestamps, which is why `changed_at` remains supported and wins when both
+    are absent.
+    """
+    hours_ago = entry.get("changed_hours_ago")
+    if hours_ago is None:
+        return entry["changed_at"]
+    when = datetime.now(UTC) - timedelta(hours=float(hours_ago))
+    return when.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class PresetLibrary:
     def __init__(self, data: dict):
         self._by_stage: dict[str, list[Preset]] = {}
@@ -73,7 +94,7 @@ class PresetLibrary:
                 Preset(
                     id=e["id"],
                     version=int(e["version"]),
-                    changed_at=e["changed_at"],
+                    changed_at=_resolve_changed_at(e),
                     description=e.get("description", "").strip(),
                     audio_filter=e["audio_filter"],
                     stage=stage,

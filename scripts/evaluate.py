@@ -196,6 +196,11 @@ def main() -> int:
     ap.add_argument("--grafana", default=None, help="override GRAFANA_URL")
     ap.add_argument("--reasoner", choices=["scripted", "gemini"], default="scripted")
     ap.add_argument("--out", default="docs/RESULTS.md")
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite a published gemini report with a weaker run",
+    )
     args = ap.parse_args()
 
     profile = Profile.load(PROFILE_PATH)
@@ -217,11 +222,34 @@ def main() -> int:
 
     elapsed = time.time() - started
     report = render(tallies, args, elapsed)
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(report)
+    out_path = Path(args.out)
+    if not _may_overwrite(out_path, args.reasoner, force=args.force):
+        print(
+            f"\nREFUSED to overwrite {out_path}: it reports a `gemini` run and this "
+            f"was `{args.reasoner}`.\nA scripted run silently replacing the published "
+            "model results is how the README came to\ncite evidence that no longer "
+            "existed. Pass --force, or --out to write elsewhere."
+        )
+        print(report)
+        return 0 if all(t.passed == t.total for t in tallies.values()) else 1
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(report)
     print(f"\n{report}\nwritten to {args.out}")
 
     return 0 if all(t.passed == t.total for t in tallies.values()) else 1
+
+
+def _may_overwrite(path: Path, reasoner: str, *, force: bool) -> bool:
+    """Refuse to replace published model results with a deterministic stand-in.
+
+    The README cites this file. A `scripted` run overwriting a `gemini` report
+    leaves the claim in the README describing evidence that no longer exists -
+    which is exactly what happened, and is the worst possible bug in a project
+    whose argument is that claims must cite evidence that is really there.
+    """
+    if force or reasoner == "gemini" or not path.exists():
+        return True
+    return "`gemini`" not in path.read_text()
 
 
 def render(tallies: dict[str, Tally], args, elapsed: float) -> str:

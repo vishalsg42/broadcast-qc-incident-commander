@@ -23,9 +23,19 @@ class FFmpegError(RuntimeError):
     """A tool exited non-zero, or produced output we could not parse."""
 
 
-def run(cmd: list[str]) -> str:
+# A 45s fixture measures in ~0.4s and transcodes in a few seconds, so anything
+# past two minutes is wedged rather than slow. Without a timeout a hung ffmpeg
+# holds the orchestrator thread and its SSE stream forever - the server keeps
+# answering health checks while that run never finishes and never fails.
+TIMEOUT_S = 120.0
+
+
+def run(cmd: list[str], *, timeout_s: float = TIMEOUT_S) -> str:
     """Run a command and return combined output. ffmpeg reports on stderr."""
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired as exc:
+        raise FFmpegError(f"{cmd[0]} exceeded {timeout_s:.0f}s and was killed") from exc
     output = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode != 0:
         raise FFmpegError(f"{cmd[0]} exited {proc.returncode}\n{output[-2000:]}")

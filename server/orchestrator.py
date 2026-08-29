@@ -119,6 +119,9 @@ class Run:
     pipeline_run_id: str | None = None
     approved: bool = False
     error: str | None = None
+    # The boot warm-up run. It exists to prime the Loki stream BEFORE a visitor
+    # arrives, so it must never be the reason one is turned away.
+    is_warmup: bool = False
     _approval: threading.Event = field(default_factory=threading.Event)
 
     def emit(self, kind: str, **payload: Any) -> None:
@@ -155,6 +158,21 @@ class Orchestrator:
     # abandoned tabs lock every other visitor out for the full five-minute
     # approval timeout, which is a worse failure than the contention it prevents.
     WORKING_STATUSES = frozenset({Status.PENDING, Status.RUNNING, Status.REPAIRING})
+
+    def working_runs(self) -> int:
+        """Runs consuming CPU right now, excluding the boot warm-up.
+
+        The warm-up is a synthetic run nobody is watching, started to create the
+        Loki stream before a visitor needs it. Counting it means that on a fresh
+        instance the first real click can be refused for the ~40s it takes -
+        which is the worst possible moment to turn someone away, by the very
+        mechanism meant to smooth their arrival.
+        """
+        return sum(
+            1
+            for r in self._runs.values()
+            if r.status in self.WORKING_STATUSES and not r.is_warmup
+        )
 
     def _evict_old_runs(self) -> None:
         """Drop the oldest FINISHED runs, and their artefacts with them.
@@ -195,7 +213,12 @@ class Orchestrator:
         return self._runs.get(run_id)
 
     def start(
-        self, fixture: str, *, reasoner: str = "scripted", profile_id: str | None = None
+        self,
+        fixture: str,
+        *,
+        reasoner: str = "scripted",
+        profile_id: str | None = None,
+        warmup: bool = False,
     ) -> Run:
         if fixture not in FIXTURES:
             raise ValueError(f"unknown fixture {fixture!r}")
@@ -204,14 +227,18 @@ class Orchestrator:
             load_profile(profile_id)
         except KeyError as exc:
             raise ValueError(str(exc)) from exc
-        working = sum(1 for r in self._runs.values() if r.status in self.WORKING_STATUSES)
-        if working >= MAX_ACTIVE_RUNS:
+        if not warmup and self.working_runs() >= MAX_ACTIVE_RUNS:
             raise TooManyRuns(
-                f"{working} run(s) already measuring. Each holds ffmpeg for about "
-                "a minute, so they are queued rather than run at once. Try again "
-                "shortly."
+                f"{self.working_runs()} run(s) already measuring. Each holds "
+                "ffmpeg for about a minute, so they are queued rather than run "
+                "at once. Try again shortly."
             )
-        run = Run(run_id=f"ui-{uuid.uuid4().hex[:10]}", fixture=fixture, profile_id=profile_id)
+        run = Run(
+            run_id=f"ui-{uuid.uuid4().hex[:10]}",
+            fixture=fixture,
+            profile_id=profile_id,
+            is_warmup=warmup,
+        )
         self._runs[run.run_id] = run
         self._evict_old_runs()
         threading.Thread(target=self._execute, args=(run, reasoner), daemon=True).start()

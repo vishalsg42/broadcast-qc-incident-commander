@@ -124,7 +124,7 @@ def warm_up() -> None:
     def _warm() -> None:
         # A failed warm-up must never stop the service.
         with contextlib.suppress(Exception):
-            orchestrator.start("clean", reasoner="scripted")
+            orchestrator.start("clean", reasoner="scripted", warmup=True)
 
     threading.Thread(target=_warm, daemon=True).start()
 

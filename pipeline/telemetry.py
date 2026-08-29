@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -44,6 +45,17 @@ LOGGER_NAME = "qcic.pipeline"
 
 _state: _Telemetry | None = None
 
+# How many callers currently hold telemetry open.
+#
+# init/shutdown are process-global, and the server runs deliveries concurrently.
+# Without a count, the first run to finish tore down the providers the others
+# were still writing through: their spans and log lines went nowhere, and their
+# investigation then waited the full ingestion timeout for telemetry that had
+# been dropped on the floor. Observed three times as a 300s "timed out waiting
+# for 3 line(s)" before the cause was found.
+_users = 0
+_lock = threading.Lock()
+
 
 @dataclass
 class _Telemetry:
@@ -60,9 +72,12 @@ def _endpoint() -> str | None:
 
 def init(endpoint: str | None = None, *, service_name: str = SERVICE_NAME) -> bool:
     """Wire up trace and log export. Returns False if telemetry is disabled."""
-    global _state
-    if _state is not None:
-        return True
+    global _state, _users
+    with _lock:
+        if _state is not None:
+            # Someone else already opened it. Join them rather than rebuilding.
+            _users += 1
+            return True
 
     endpoint = endpoint or _endpoint()
     if not endpoint:
@@ -92,7 +107,9 @@ def init(endpoint: str | None = None, *, service_name: str = SERVICE_NAME) -> bo
     pipeline_logger.addHandler(handler)
     pipeline_logger.propagate = False
 
-    _state = _Telemetry(tracer_provider, logger_provider, endpoint, handler)
+    with _lock:
+        _state = _Telemetry(tracer_provider, logger_provider, endpoint, handler)
+        _users += 1
     return True
 
 
@@ -102,13 +119,14 @@ def init_for_test(span_exporter) -> None:
     Exists so the span hierarchy can be asserted without a running collector.
     Log export stays disabled; only trace structure is under test.
     """
-    global _state
+    global _state, _users
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
     resource = Resource.create({"service.name": f"{SERVICE_NAME}-test"})
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
     _state = _Telemetry(tracer_provider, LoggerProvider(resource=resource), "memory://")
+    _users = 1
 
 
 def tracer() -> Any:
@@ -128,17 +146,24 @@ def shutdown() -> None:
     Batch processors export on a timer, so a short-lived process that exits
     without flushing silently drops the telemetry the investigation depends on.
     """
-    global _state
-    if _state is None:
-        return
-    # Detach the handler before shutting its provider down. Without this a
-    # server that re-inits per run accumulates handlers pointing at dead
-    # providers, and log export degrades silently after the first run.
-    if _state.handler is not None:
-        logging.getLogger(LOGGER_NAME).removeHandler(_state.handler)
-    _state.tracer_provider.shutdown()
-    _state.logger_provider.shutdown()
-    _state = None
+    global _state, _users
+    with _lock:
+        if _state is None:
+            return
+        _users -= 1
+        if _users > 0:
+            # Another delivery is still writing through these providers. Tearing
+            # them down here is what silently dropped its telemetry.
+            return
+        _users = 0
+        # Detach the handler before shutting its provider down. Without this a
+        # server that re-inits per run accumulates handlers pointing at dead
+        # providers, and log export degrades silently after the first run.
+        if _state.handler is not None:
+            logging.getLogger(LOGGER_NAME).removeHandler(_state.handler)
+        state, _state = _state, None
+    state.tracer_provider.shutdown()
+    state.logger_provider.shutdown()
 
 
 def current_trace_ids() -> tuple[str, str]:

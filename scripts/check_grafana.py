@@ -66,13 +66,27 @@ def main() -> int:
     # ---- 2. datasource UIDs --------------------------------------------------
     print("\n2. Datasource UIDs")
     try:
-        uids = client.datasource_uids()
+        client.datasource_uids()
     except GrafanaError as exc:
         print(f"{BAD}{exc}")
         return report(["token likely lacks permission to list datasources"])
 
-    loki = next((u for t, u in uids.items() if t == "loki"), None)
-    tempo = next((u for t, u in uids.items() if t == "tempo"), None)
+    # A Cloud stack ships SEVERAL datasources of the same type - a Loki for
+    # application logs, another for alert state history, another for usage
+    # insights. Taking the first match silently queries the wrong one and
+    # returns nothing, which reads as a broken integration.
+    all_ds = client._get("/api/datasources")
+    loki = _pick(all_ds, "loki", prefer=("-logs",), avoid=("usage", "alert-state"))
+    tempo = _pick(all_ds, "tempo", prefer=("-traces",), avoid=())
+
+    for kind in ("loki", "tempo"):
+        same = [d for d in all_ds if d["type"] == kind]
+        if len(same) > 1:
+            chosen = loki if kind == "loki" else tempo
+            print(f"{WARN}{len(same)} {kind} datasources on this stack; chose {chosen}")
+            for d in same:
+                mark = "->" if d["uid"] == chosen else "  "
+                print(f"       {mark} {d['uid']}")
     for kind, uid in (("loki", loki), ("tempo", tempo)):
         print(f"{OK if uid else BAD}{kind:6s} {uid or '<not found>'}")
     if not (loki and tempo):
@@ -137,6 +151,22 @@ def main() -> int:
         print(f"{WARN}IRM — {incident.detail}")
 
     return report(problems)
+
+
+def _pick(datasources: list[dict], kind: str, *, prefer: tuple, avoid: tuple) -> str | None:
+    """Choose the datasource actually carrying application telemetry."""
+    candidates = [d for d in datasources if d["type"] == kind]
+    if not candidates:
+        return None
+    wanted = [
+        d
+        for d in candidates
+        if any(p in d["uid"] for p in prefer) and not any(a in d["uid"] for a in avoid)
+    ]
+    if wanted:
+        return wanted[0]["uid"]
+    plain = [d for d in candidates if not any(a in d["uid"] for a in avoid)]
+    return (plain or candidates)[0]["uid"]
 
 
 def report(problems: list[str]) -> int:

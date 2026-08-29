@@ -207,12 +207,14 @@ class Orchestrator:
         failing = divergence.summary["first_failing_stage"]
         source_ok = baseline.summary["source_in_spec"]
         preset_id = preset_version = changed_at = cause_detail = None
+        recently_changed = None
 
         if source_ok and failing:
             actor = inv.gather_actor(failing)
             preset_id = actor.summary["preset_id"]
             preset_version = actor.summary["preset_version"]
             changed_at = actor.summary["preset_changed_at"]
+            recently_changed = actor.summary.get("recently_changed")
             run.emit(
                 "trace", **{k: v for k, v in actor.summary.items() if k != "sibling_stages"}
             )
@@ -249,6 +251,7 @@ class Orchestrator:
             preset_id=preset_id,
             preset_version=preset_version,
             preset_changed_at=changed_at,
+            recently_changed=recently_changed,
             cause_detail=cause_detail,
             delivery_profile_id=self.profile.id,
         )

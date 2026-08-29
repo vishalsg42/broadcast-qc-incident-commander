@@ -60,6 +60,7 @@ def build_conclusion(
     preset_changed_at: str | None,
     cause_detail: str | None,
     delivery_profile_id: str,
+    recently_changed: bool | None = None,
     confidence: str = "high",
 ) -> Conclusion:
     """Assemble claims from what the phases established.
@@ -130,17 +131,42 @@ def build_conclusion(
     )
 
     if preset_id:
+        # WHICH preset ran is an observation. WHETHER it changed recently is a
+        # separate observation. Only together do they support a "a change broke
+        # this" reading, and when the preset is old that reading is wrong - the
+        # likelier fault is that the wrong preset was selected for this title.
         claims.append(
             Claim(
                 claim_type=ClaimType.ACTOR_PRESET,
-                claim_value=(
-                    f"{failing_stage} executed preset {preset_id} "
-                    f"v{preset_version} (changed {preset_changed_at})"
-                ),
+                claim_value=f"{failing_stage} executed preset {preset_id} v{preset_version}",
                 supporting_step_ids=[s for s in [actor] if s],
                 confidence="high",
             )
         )
+        if recently_changed is True:
+            claims.append(
+                Claim(
+                    claim_type=ClaimType.ACTOR_PRESET,
+                    claim_value=(
+                        f"{preset_id} changed recently ({preset_changed_at}), so a "
+                        "configuration change is a plausible trigger"
+                    ),
+                    supporting_step_ids=[s for s in [actor] if s],
+                    confidence="medium",
+                )
+            )
+        elif recently_changed is False:
+            claims.append(
+                Claim(
+                    claim_type=ClaimType.ACTOR_PRESET,
+                    claim_value=(
+                        f"{preset_id} has not changed since {preset_changed_at}, so this "
+                        "is preset SELECTION rather than a preset change"
+                    ),
+                    supporting_step_ids=[s for s in [actor] if s],
+                    confidence="medium",
+                )
+            )
 
     if cause_detail:
         claims.append(

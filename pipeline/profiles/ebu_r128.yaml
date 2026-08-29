@@ -14,6 +14,11 @@ name: EBU R128 — European broadcast delivery
 version: 1
 standard: "EBU R128 / EBU Tech 3341"
 
+measurement:
+  # What the probe must be able to produce for this profile to be adjudicated.
+  # ffmpeg's ebur128 implements exactly this gating, so R128 is fully measurable.
+  requires: bs1770_gated
+
 loudness:
   # Integrated (programme) loudness, ffmpeg `ebur128` summary "I" value.
   integrated_lufs:

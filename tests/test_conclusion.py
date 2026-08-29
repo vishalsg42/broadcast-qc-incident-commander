@@ -67,7 +67,45 @@ class TestHappyPath:
         c = build_conclusion(ledger, **_fault_args())
         actor = next(x for x in c.claims if x.claim_type == ClaimType.ACTOR_PRESET)
         assert "pkg_h264_v7" in actor.claim_value
-        assert "2026-08-29T14:02:00Z" in actor.claim_value
+        assert "v7" in actor.claim_value
+
+
+class TestSelectionVersusChange:
+    """WHICH preset ran and WHETHER it changed are independent facts.
+
+    Fusing them tells one causal story - "a preset changed broke this" - and the
+    more common real fault is a preset that changed nothing and was MIS-SELECTED:
+    a stereo title routed through the 5.1 fold-down profile. Same symptom, same
+    filter, changed_at from months ago. Reporting them separately keeps the
+    conclusion true in both cases.
+    """
+
+    def test_recent_change_is_offered_as_a_plausible_trigger(self, ledger):
+        c = build_conclusion(ledger, **(_fault_args() | {"recently_changed": True}))
+        claims = [x.claim_value for x in c.claims if x.claim_type == ClaimType.ACTOR_PRESET]
+        assert any("changed recently" in v for v in claims)
+        assert any("plausible trigger" in v for v in claims)
+
+    def test_an_old_preset_is_reported_as_SELECTION_not_a_change(self, ledger):
+        c = build_conclusion(ledger, **(_fault_args() | {"recently_changed": False}))
+        claims = [x.claim_value for x in c.claims if x.claim_type == ClaimType.ACTOR_PRESET]
+        assert any("SELECTION rather than a preset change" in v for v in claims)
+        assert not any("plausible trigger" in v for v in claims)
+
+    def test_unknown_change_state_asserts_neither(self, ledger):
+        """None means we could not determine it. Say nothing rather than guess."""
+        c = build_conclusion(ledger, **(_fault_args() | {"recently_changed": None}))
+        claims = [x.claim_value for x in c.claims if x.claim_type == ClaimType.ACTOR_PRESET]
+        assert len(claims) == 1
+        assert "changed recently" not in claims[0]
+        assert "SELECTION" not in claims[0]
+
+    def test_the_change_claim_is_hedged_lower_than_the_observation(self, ledger):
+        """Which preset ran is observed. Whether the change caused it is inferred."""
+        c = build_conclusion(ledger, **(_fault_args() | {"recently_changed": True}))
+        actor = [x for x in c.claims if x.claim_type == ClaimType.ACTOR_PRESET]
+        assert actor[0].confidence == "high"
+        assert actor[1].confidence == "medium"
 
     def test_root_cause_is_hedged_not_asserted(self, ledger):
         """A preset changing before a failure is correlation, not proof."""

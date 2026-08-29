@@ -22,6 +22,13 @@ from .qc import BlackInterval, QCReport
 
 PASS = "PASS"
 BLOCKED = "BLOCKED"
+UNMEASURABLE = "UNMEASURABLE"
+
+# What this pipeline's QC probe can actually produce. ffmpeg's `ebur128`
+# implements EBU R128 gating (absolute -70 LUFS, relative -10 LU). It does NOT
+# implement dialogue gating, which needs a speech anchor and is a separate
+# subsystem.
+PROBE_CAPABILITIES = frozenset({"bs1770_gated"})
 
 
 @dataclass(frozen=True)
@@ -86,6 +93,34 @@ class Profile:
     @property
     def version(self) -> int:
         return int(self._d.get("version", 1))
+
+    @property
+    def name(self) -> str:
+        """Human-readable name, e.g. for the control room's profile picker."""
+        return self._d.get("name", self.id)
+
+    @property
+    def standard(self) -> str:
+        return self._d.get("standard", "")
+
+    @property
+    def required_measurement(self) -> str:
+        """The measurement this profile must be adjudicated against."""
+        return (self._d.get("measurement") or {}).get("requires", "bs1770_gated")
+
+    @property
+    def measurement_note(self) -> str:
+        return (self._d.get("measurement") or {}).get("note", "").strip()
+
+    @property
+    def is_measurable(self) -> bool:
+        """Whether this pipeline's probe can produce what the profile needs.
+
+        A profile the probe cannot measure must not be adjudicated. Comparing a
+        BS.1770 gated value against a dialogue-gated target compares two
+        different quantities and yields a confident, wrong verdict.
+        """
+        return self.required_measurement in PROBE_CAPABILITIES
 
     @property
     def loudness_target(self) -> tuple[float, float]:
@@ -260,7 +295,33 @@ def _check_black(profile: Profile, report: QCReport) -> list[CheckResult]:
 
 
 def evaluate(profile: Profile, report: QCReport) -> Verdict:
-    """Adjudicate one QC report against one delivery profile. Pure function."""
+    """Adjudicate one QC report against one delivery profile. Pure function.
+
+    Returns UNMEASURABLE when the profile requires a measurement this probe
+    cannot produce. Declining is the correct answer: a wrong verdict delivered
+    confidently is worse than no verdict.
+    """
+    if not profile.is_measurable:
+        return Verdict(
+            status=UNMEASURABLE,
+            profile_id=profile.id,
+            profile_version=profile.version,
+            asset_path=report.asset_path,
+            checks=[
+                CheckResult(
+                    check_id="measurement.capability",
+                    status=UNMEASURABLE,
+                    message=(
+                        f"{profile.id} requires {profile.required_measurement}; this "
+                        f"probe produces {', '.join(sorted(PROBE_CAPABILITIES))}. "
+                        + (profile.measurement_note or "Not adjudicated.")
+                    ),
+                    measured=None,
+                    expected=profile.required_measurement,
+                )
+            ],
+        )
+
     checks = _check_loudness(profile, report) + _check_black(profile, report)
     return Verdict(
         status=BLOCKED if any(c.failed for c in checks) else PASS,

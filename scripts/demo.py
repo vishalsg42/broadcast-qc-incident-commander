@@ -138,12 +138,14 @@ def main() -> int:
 
     failing = divergence.summary["first_failing_stage"]
     preset_id = preset_version = changed_at = cause_detail = None
+    recently_changed = None
 
     if baseline.summary["source_in_spec"] and failing:
         actor = inv.gather_actor(failing)
         preset_id = actor.summary["preset_id"]
         preset_version = actor.summary["preset_version"]
         changed_at = actor.summary["preset_changed_at"]
+        recently_changed = actor.summary.get("recently_changed")
         print(f"  ACTOR       {reasoner.interpret(ledger, Phase.ACTOR, actor.summary)}")
 
         preset = PresetLibrary.load().get(failing, preset_id)
@@ -177,6 +179,7 @@ def main() -> int:
         preset_id=preset_id,
         preset_version=preset_version,
         preset_changed_at=changed_at,
+        recently_changed=recently_changed,
         cause_detail=cause_detail,
         delivery_profile_id=profile.id,
     )

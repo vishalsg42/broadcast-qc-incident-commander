@@ -123,12 +123,14 @@ def run_case(
     source_ok = baseline.summary["source_in_spec"]
     failing = divergence.summary["first_failing_stage"]
     preset_id = preset_version = changed_at = cause = None
+    recently_changed = None
 
     if source_ok and failing:
         actor = inv.gather_actor(failing)
         preset_id = actor.summary["preset_id"]
         preset_version = actor.summary["preset_version"]
         changed_at = actor.summary["preset_changed_at"]
+        recently_changed = actor.summary.get("recently_changed")
         reasoner.interpret(ledger, Phase.ACTOR, actor.summary)
         preset = PresetLibrary.load().get(failing, preset_id)
         cause_result = inv.gather_cause(
@@ -144,6 +146,7 @@ def run_case(
         preset_id=preset_id,
         preset_version=preset_version,
         preset_changed_at=changed_at,
+        recently_changed=recently_changed,
         cause_detail=cause,
         delivery_profile_id=profile.id,
     )

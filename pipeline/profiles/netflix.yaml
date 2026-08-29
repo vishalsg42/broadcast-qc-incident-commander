@@ -1,0 +1,58 @@
+# Delivery profile: Netflix.
+#
+# Published spec: -27 LKFS +/- 2 LU, DIALOG-GATED, measured per ITU-R BS.1770,
+# true peak not exceeding -2 dBTP.
+#   https://partnerhelp.netflixstudios.com/hc/en-us/articles/360050414014
+#
+# THIS PROFILE IS DELIBERATELY NOT ADJUDICABLE BY THIS SYSTEM.
+#
+# Dialog-gating measures loudness only where dialogue is present, so an action
+# sequence with no speech does not drag the number down. ffmpeg's ebur128
+# implements R128 gating (absolute -70 LUFS, relative -10 LU) - NOT dialogue
+# gating. Comparing an R128 integrated measurement against a dialogue-gated
+# target compares two different quantities and produces confidently wrong
+# verdicts.
+#
+# Implementing it needs speech detection to derive the dialogue anchor, which is
+# a separate subsystem. Until then the gate declines to adjudicate rather than
+# guessing. Refusing to answer is the correct answer here.
+
+id: netflix-dialog-gated
+name: Netflix — dialogue-gated
+version: 1
+standard: "Netflix Sound Mix Specifications (ITU-R BS.1770, dialog-gated)"
+
+measurement:
+  requires: bs1770_dialog_gated
+  note: >
+    Requires the dialogue anchor. This probe produces BS.1770 gated programme
+    loudness only, so the profile cannot be adjudicated here.
+
+loudness:
+  integrated_lufs:
+    target: -27.0
+    tolerance: 2.0
+    measurement: dialog_gated
+  true_peak_dbtp:
+    max: -2.0
+
+black:
+  detector:
+    pixel_black_threshold: 0.10
+    picture_black_ratio: 0.98
+    min_duration_s: 0.5
+  permitted_regions:
+    - id: head_black
+      required: true
+      start_s: 0.0
+      end_s: 10.0
+  body:
+    max_contiguous_black_s: 1.0
+
+source_gate:
+  reject_if_source_out_of_spec: true
+
+remediation_allowlist:
+  - id: escalate_to_human
+    params:
+      reason: { type: string, max_length: 500 }

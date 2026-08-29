@@ -32,6 +32,19 @@ already-stereo bed into both output channels. You cannot guess this from the
 failing number: the source was fine and the normaliser was fine. The
 investigation has to walk the stages.
 
+**On the size of the shift.** Our fixture's programme body is a mono tone
+widened to stereo, so its legs are bit-identical and summing them doubles
+amplitude exactly: **+6.02 dB**. On real decorrelated programme stereo the legs
+sum incoherently and the shift is nearer **+3 LU**. Either way it breaks R128's
+±0.5, but the honest statement is *+3 to +6 LU depending on inter-channel
+correlation*.
+
+That variability is also the argument for measuring channel configuration
+directly rather than inferring it: a wide mix might shift only ~2 LU and slip
+inside ATSC A/85's ±2 tolerance **while the stereo image is destroyed**. Loudness
+is a symptom, and a content-dependent one. See
+[what we deliberately do not do](ARCHITECTURE.md).
+
 **Attribution targets a preset version, not a worker.** Real facilities do not
 hunt for a broken machine; they hunt for which transcode preset changed, and
 when.

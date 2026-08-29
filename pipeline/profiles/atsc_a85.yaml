@@ -1,0 +1,62 @@
+# Delivery profile: ATSC A/85, US broadcast.
+#
+# The CALM Act directs the FCC to enforce ATSC A/85 for the loudness of
+# COMMERCIAL ADVERTISEMENTS. It is not blanket programme-delivery law, and this
+# profile should not be described as one.
+#
+# A/85 anchors on the "anchor element" - usually dialogue. Our probe measures
+# BS.1770 gated programme loudness, which tracks it closely for dialogue-driven
+# content and diverges for content with long non-dialogue passages. That
+# approximation is declared below rather than hidden.
+
+id: atsc-a85-tv
+name: ATSC A/85 — US broadcast
+version: 1
+standard: "ATSC A/85 (ITU-R BS.1770)"
+
+measurement:
+  # What the probe must be able to produce for this profile to be adjudicated.
+  requires: bs1770_gated
+  note: >
+    A/85 anchors on the anchor element (typically dialogue). BS.1770 gated
+    programme loudness is a close proxy for dialogue-driven content.
+
+loudness:
+  integrated_lufs:
+    target: -24.0
+    tolerance: 2.0          # A/85 works to +/- 2 LU
+    measurement: integrated
+  true_peak_dbtp:
+    max: -2.0
+
+black:
+  detector:
+    pixel_black_threshold: 0.10
+    picture_black_ratio: 0.98
+    min_duration_s: 0.5
+  permitted_regions:
+    - id: head_black
+      required: true
+      start_s: 0.0
+      end_s: 10.0
+      note: "Head black before programme start"
+    - id: tail_black
+      required: false
+      start_s: -2.0
+      end_s: 0.0
+  body:
+    max_contiguous_black_s: 1.0
+
+source_gate:
+  reject_if_source_out_of_spec: true
+
+remediation_allowlist:
+  - id: reencode_with_profile
+    params:
+      profile_id: { enum: [ebu-r128-tv, atsc-a85-tv] }
+  - id: reencode_with_loudness_target
+    params:
+      target_lufs: { min: -31.0, max: -16.0 }
+  - id: escalate_to_human
+    params:
+      reason: { type: string, max_length: 500 }

@@ -24,6 +24,7 @@ controller recorded.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from pipeline.policy import BLOCKED
@@ -170,12 +171,21 @@ class Investigator:
                 f"trace {trace_id} has no span for stage {failing_stage!r}"
             )
 
+        changed_at = target.attributes.get("qc.preset_changed_at")
         summary = {
             "trace_id": trace_id,
             "stage": failing_stage,
             "preset_id": target.attributes.get("qc.preset_id"),
             "preset_version": target.attributes.get("qc.preset_version"),
-            "preset_changed_at": target.attributes.get("qc.preset_changed_at"),
+            "preset_changed_at": changed_at,
+            # WHICH preset ran and WHETHER it changed recently are independent
+            # facts. Fusing them tells one causal story - "a preset changed" -
+            # and the more common real fault is a preset that changed nothing
+            # and was MIS-SELECTED: a stereo title routed through the 5.1
+            # fold-down profile. Same symptom, same filter, changed_at from
+            # eight months ago.
+            "recently_changed": _changed_recently(changed_at),
+            "days_since_change": _days_since(changed_at),
             "sibling_stages": [
                 {
                     "stage": s.attributes.get("qc.stage"),
@@ -226,6 +236,30 @@ class Investigator:
             },
         )
         return PhaseResult(Phase.CAUSE, query, entries, summary)
+
+
+RECENT_CHANGE_DAYS = 7
+
+
+def _days_since(changed_at: str | None) -> float | None:
+    if not changed_at:
+        return None
+    try:
+        when = datetime.fromisoformat(str(changed_at).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return (datetime.now(UTC) - when).total_seconds() / 86400
+
+
+def _changed_recently(changed_at: str | None) -> bool | None:
+    """Whether the preset changed recently enough to be a plausible trigger.
+
+    None when unknown. A preset that has not changed in months did not cause
+    today's failure by changing - it may still be the wrong preset for this
+    title, which is a different finding.
+    """
+    days = _days_since(changed_at)
+    return None if days is None else days <= RECENT_CHANGE_DAYS
 
 
 def _as_float(value: str) -> float | None:

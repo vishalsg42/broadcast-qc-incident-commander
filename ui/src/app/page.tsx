@@ -183,7 +183,13 @@ export default function ControlRoom() {
               />
             </div>
 
-            <SignalPath stages={state.stages} />
+            <SignalPath
+              stages={state.stages}
+              activeStage={state.activeStage}
+              target={profile?.target_lufs ?? -23}
+              tolerance={profile?.tolerance_lu ?? 0.5}
+              withheld={withheld}
+            />
             {state.ingest && (
               <IngestWait
                 backend={state.ingest.backend}
@@ -194,7 +200,7 @@ export default function ControlRoom() {
               />
             )}
             <UnmeasurablePanel event={state.unmeasurable} />
-            <EvidenceTable rows={state.evidence} />
+            <EvidenceTable rows={state.evidence} activePhase={state.activePhase} />
             <ConclusionPanel conclusion={state.conclusion} />
             <ProposalPanel
               approval={state.approval}

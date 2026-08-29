@@ -130,14 +130,27 @@ export function LoudnessMeter({
           {truePeakCeiling !== null && (
             <SpecRow label="True peak" value={`≤ ${truePeakCeiling.toFixed(1)} dBTP`} />
           )}
-          <SpecRow label="Head black" value="required, 0–10 s" />
-          <SpecRow label="Black in body" value={`≤ ${maxBodyBlack} s contiguous`} />
         </dl>
-        <p className="mt-3 text-[0.75rem] leading-snug text-legend">
-          Black is a policy, not a boolean. Deliverables mandate head black, bars, slate
-          and break black — a profile that failed on any black frame would reject almost
-          every legitimate master.
-        </p>
+
+        {/* The black-frame policy is enforced on every run but is never the check
+            that fails here, and its rationale is a paragraph. Folded away by
+            default: on screen during an incident, it is noise between the
+            operator and the number that actually moved. */}
+        <details className="group mt-3">
+          <summary className="legend cursor-pointer list-none text-legend hover:text-read">
+            <span className="group-open:hidden">Black-frame policy ▸</span>
+            <span className="hidden group-open:inline">Black-frame policy ▾</span>
+          </summary>
+          <dl className="mt-2.5 space-y-1.5">
+            <SpecRow label="Head black" value="required, 0–10 s" />
+            <SpecRow label="Black in body" value={`≤ ${maxBodyBlack} s contiguous`} />
+          </dl>
+          <p className="mt-2 text-[0.75rem] leading-snug text-legend">
+            Black is a policy, not a boolean. Deliverables mandate head black, bars,
+            slate and break black — a profile that failed on any black frame would
+            reject almost every legitimate master.
+          </p>
+        </details>
       </div>
     </div>
   )

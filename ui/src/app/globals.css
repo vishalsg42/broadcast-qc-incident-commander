@@ -101,9 +101,52 @@ body {
   animation: trace-in 220ms ease-out both;
 }
 
+/* Work in progress.
+   A slow breathing pulse rather than a spinner: stages take ten seconds or
+   more, and a spinner at that duration reads as a hang. This reads as
+   "measuring". */
+@keyframes working {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.working {
+  animation: working 1.4s ease-in-out infinite;
+}
+
+/* A determinate sweep for the one place we genuinely cannot estimate: waiting
+   on a remote ingestion pipeline. */
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+.sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 25%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-bright) 22%, transparent),
+    transparent
+  );
+  animation: sweep 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .enter,
-  .bar-seg {
+  .bar-seg,
+  .working,
+  .sweep::after {
     animation: none !important;
     transition: none !important;
   }

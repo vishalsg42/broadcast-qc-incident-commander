@@ -30,6 +30,10 @@ export interface RunState {
   repaired: RepairedEvent | null
   writeBack: WriteBackEvent | null
   escalation: string | null
+  /** Stage currently being measured by ffmpeg, or null between stages. */
+  activeStage: string | null
+  /** Investigation phase the model is currently interpreting. */
+  activePhase: string | null
   unmeasurable: UnmeasurableEvent | null
   error: string | null
   ingest: { backend: string; elapsed: number; timeout: number; found: number; expected: number } | null
@@ -48,6 +52,8 @@ const EMPTY: RunState = {
   repaired: null,
   writeBack: null,
   escalation: null,
+  activeStage: null,
+  activePhase: null,
   unmeasurable: null,
   error: null,
   ingest: null,
@@ -135,12 +141,18 @@ export function useRun() {
 
 function reduce(s: RunState, e: RunEvent): RunState {
   switch (e.kind) {
+    case "stage_started":
+      return { ...s, activeStage: String((e as { stage?: string }).stage ?? "") }
     case "stage":
-      return { ...s, stages: [...s.stages, e as StageEvent] }
+      // The stage that just finished is no longer in progress. Cleared here
+      // rather than on the next start, so the gap between stages reads as done.
+      return { ...s, stages: [...s.stages, e as StageEvent], activeStage: null }
+    case "phase_started":
+      return { ...s, activePhase: String((e as { phase?: string }).phase ?? "") }
     case "verdict":
       return { ...s, verdict: e as VerdictEvent }
     case "evidence":
-      return { ...s, evidence: [...s.evidence, e as EvidenceEvent] }
+      return { ...s, evidence: [...s.evidence, e as EvidenceEvent], activePhase: null }
     case "trace":
       return { ...s, trace: e as TraceEvent }
     case "refusal":
@@ -178,7 +190,7 @@ function reduce(s: RunState, e: RunEvent): RunState {
     case "error":
       return { ...s, error: String((e as { message?: string }).message ?? "Run failed") }
     case "end":
-      return { ...s, running: false }
+      return { ...s, running: false, activeStage: null, activePhase: null }
     default:
       return s
   }

@@ -1,5 +1,6 @@
 "use client"
 
+import { StageChart } from "./StageChart"
 import type {
   ApprovalEvent,
   ConclusionEvent,
@@ -11,63 +12,94 @@ import type {
   WriteBackEvent,
 } from "@/lib/types"
 
-export function SignalPath({ stages }: { stages: StageEvent[] }) {
+export function SignalPath({
+  stages,
+  activeStage,
+  target,
+  tolerance,
+  withheld,
+}: {
+  stages: StageEvent[]
+  activeStage: string | null
+  target: number
+  tolerance: number
+  withheld: boolean
+}) {
+  const order = ["ingest", "normalize", "package"]
   return (
     <div className="panel">
-      <div className="border-b border-rule px-4 py-2.5">
-        <span className="legend">Signal path</span>
-      </div>
+      <StageChart
+        stages={stages}
+        target={target}
+        tolerance={tolerance}
+        withheld={withheld}
+      />
+      {/* Always three slots. They fill in as each stage finishes, so the
+          reader watches the signal path build rather than seeing it appear
+          complete after a silent minute. */}
       <div className="grid grid-cols-3 divide-x divide-rule">
-        {stages.length === 0
-          ? ["ingest", "normalize", "package"].map((name) => (
+        {order.map((name) => {
+          const done = stages.find((s) => s.stage === name)
+          const running = activeStage === name
+
+          if (!done) {
+            return (
               <div key={name} className="px-4 py-3">
                 <div className="legend">{name}</div>
-                <div className="meter mt-1 text-lg text-legend">—</div>
-              </div>
-            ))
-          : stages.map((s) => {
-              const bad = s.verdict === "BLOCKED"
-              // A stage that was never judged must not wear the in-spec marker.
-              // Green here would claim a pass the gate explicitly declined to give.
-              const withheld = s.verdict === "UNMEASURABLE"
-              const mark = withheld
-                ? "var(--color-pending)"
-                : bad
-                  ? "var(--color-blocked)"
-                  : "var(--color-inspec)"
-              return (
-                <div key={s.stage} className="enter px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <span className="legend">{s.stage}</span>
-                    <span
-                      aria-hidden
-                      className="h-1.5 w-1.5"
-                      style={{
-                        background: mark,
-                        // Hollow, not filled: measured, but not adjudicated.
-                        boxShadow: withheld ? `inset 0 0 0 1px ${mark}` : undefined,
-                        opacity: withheld ? 0.5 : 1,
-                      }}
-                    />
-                  </div>
-                  <div
-                    className="meter mt-1 text-lg"
-                    style={{
-                      color: bad
-                        ? "var(--color-blocked)"
-                        : withheld
-                          ? "var(--color-read)"
-                          : "var(--color-bright)",
-                    }}
-                  >
-                    {s.integrated_lufs.toFixed(1)}
-                  </div>
-                  <div className="meter mt-1 text-[0.6875rem] text-legend">
-                    {s.preset_id} v{s.preset_version}
-                  </div>
+                <div
+                  className={`meter mt-1 text-lg text-legend${running ? " working" : ""}`}
+                >
+                  {running ? "measuring" : "—"}
                 </div>
-              )
-            })}
+                <div className="meter mt-1 text-[0.6875rem] text-legend">
+                  {running ? "ffmpeg running" : "\u00a0"}
+                </div>
+              </div>
+            )
+          }
+
+          const bad = done.verdict === "BLOCKED"
+          // A stage that was never judged must not wear the in-spec marker.
+          // Green would claim a pass the gate explicitly declined to give.
+          const held = done.verdict === "UNMEASURABLE"
+          const mark = held
+            ? "var(--color-pending)"
+            : bad
+              ? "var(--color-blocked)"
+              : "var(--color-inspec)"
+          return (
+            <div key={name} className="enter px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="legend">{name}</span>
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5"
+                  style={{
+                    background: mark,
+                    // Hollow, not filled: measured, but not adjudicated.
+                    boxShadow: held ? `inset 0 0 0 1px ${mark}` : undefined,
+                    opacity: held ? 0.5 : 1,
+                  }}
+                />
+              </div>
+              <div
+                className="meter mt-1 text-lg"
+                style={{
+                  color: bad
+                    ? "var(--color-blocked)"
+                    : held
+                      ? "var(--color-read)"
+                      : "var(--color-bright)",
+                }}
+              >
+                {done.integrated_lufs.toFixed(1)}
+              </div>
+              <div className="meter mt-1 text-[0.6875rem] text-legend">
+                {done.preset_id} v{done.preset_version}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -107,7 +139,7 @@ export function AttributionPanel({ trace }: { trace: TraceEvent | null }) {
         </div>
       ) : (
         <p className="mt-2 text-sm text-legend">
-          Facilities hunt for the preset that changed, not the machine that ran it.
+          The setting that produced the defect appears here once the trace is read.
         </p>
       )}
     </div>

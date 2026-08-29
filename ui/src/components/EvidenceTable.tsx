@@ -17,7 +17,13 @@ const column = createColumnHelper<EvidenceEvent>()
  * it. That pairing is the point: the model supplied `finding` and nothing else,
  * so a reader can check any interpretation against the query that produced it.
  */
-export function EvidenceTable({ rows }: { rows: EvidenceEvent[] }) {
+export function EvidenceTable({
+  rows,
+  activePhase,
+}: {
+  rows: EvidenceEvent[]
+  activePhase: string | null
+}) {
   const columns = [
     column.accessor("step_id", {
       header: "Step",
@@ -61,16 +67,9 @@ export function EvidenceTable({ rows }: { rows: EvidenceEvent[] }) {
     getCoreRowModel: getCoreRowModel(),
   })
 
-  if (rows.length === 0) {
-    return (
-      <div className="panel px-4 py-3">
-        <span className="legend">Evidence chain</span>
-        <p className="mt-1 text-sm text-legend">
-          Each phase records the query the controller ran and the model&apos;s reading of it.
-        </p>
-      </div>
-    )
-  }
+  // Nothing to show and nothing running: render nothing. An empty panel
+  // explaining what would eventually appear is just clutter on a first load.
+  if (rows.length === 0 && !activePhase) return null
 
   return (
     <div className="panel overflow-x-auto">
@@ -98,6 +97,16 @@ export function EvidenceTable({ rows }: { rows: EvidenceEvent[] }) {
           ))}
         </tbody>
       </table>
+      {activePhase && (
+        <div className="flex items-center gap-3 border-t border-rule px-4 py-3">
+          <span className="working legend text-bright">
+            {activePhase.toLowerCase()}
+          </span>
+          <span className="legend">
+            controller queried Grafana; the model is reading the result
+          </span>
+        </div>
+      )}
     </div>
   )
 }

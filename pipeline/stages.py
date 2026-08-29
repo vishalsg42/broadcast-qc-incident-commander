@@ -13,6 +13,7 @@ responsible - and the preset is the thing a real facility would actually hunt fo
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -177,6 +178,8 @@ def run_pipeline(
     black_opts: dict | None = None,
     asset_id: str | None = None,
     profile: Profile | None = None,
+    on_stage_start: Callable[[str], None] | None = None,
+    on_stage_done: Callable[[StageResult], None] | None = None,
 ) -> PipelineRun:
     """Run ingest -> normalize -> package, measuring QC after every stage.
 
@@ -185,6 +188,10 @@ def run_pipeline(
 
     `profile` is optional and only used to label emitted telemetry with a verdict;
     it never changes what the pipeline produces.
+
+    The two callbacks report progress as it happens. Each stage shells out to
+    ffmpeg for ten seconds or more, so a caller that only sees the finished run
+    has nothing to show for most of the wall clock.
     """
     src = Path(source)
     if not src.exists():
@@ -206,10 +213,14 @@ def run_pipeline(
     # unrelated single-span traces instead of the asset's journey.
     with telemetry.run_span(run_id=run.run_id, asset_id=run.asset_id, source_path=str(src)):
         for stage in STAGE_ORDER:
+            if on_stage_start:
+                on_stage_start(stage)
             preset, dst = _resolve_stage(stage, run, presets, overrides, out, current)
             result = _execute_stage(stage, preset, current, dst, run, black_opts, profile)
             run.stages.append(result)
             current = Path(result.output_path)
+            if on_stage_done:
+                on_stage_done(result)
 
         telemetry.emit_pipeline_complete(
             run_id=run.run_id, asset_id=run.asset_id, stage_count=len(run.stages)

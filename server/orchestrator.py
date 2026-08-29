@@ -160,6 +160,21 @@ class Orchestrator:
                 "Grafana Cloud, a quoted OTEL_EXPORTER_OTLP_HEADERS carrying "
                 "Authorization=Basic <base64>)."
             )
+
+        def _stage_done(result) -> None:
+            # Emitted as each stage finishes rather than all three at the end,
+            # so the operator watches the signal path build and sees WHERE the
+            # measurement turns. ffmpeg takes ten seconds or more per stage.
+            verdict = evaluate(profile, result.qc)
+            run.emit(
+                "stage",
+                stage=result.stage,
+                preset_id=result.preset.id,
+                preset_version=result.preset.version,
+                integrated_lufs=result.qc.loudness.integrated_lufs,
+                verdict=verdict.status,
+            )
+
         try:
             pr = run_pipeline(
                 ROOT / "media" / media,
@@ -167,21 +182,13 @@ class Orchestrator:
                 overrides={PACKAGE: fault} if fault else None,
                 black_opts=profile.black_detector_opts,
                 profile=profile,
+                on_stage_start=lambda stage: run.emit("stage_started", stage=stage),
+                on_stage_done=_stage_done,
             )
         finally:
             telemetry.shutdown()
 
         run.pipeline_run_id = pr.run_id
-        for stage in pr.stages:
-            verdict = evaluate(profile, stage.qc)
-            run.emit(
-                "stage",
-                stage=stage.stage,
-                preset_id=stage.preset.id,
-                preset_version=stage.preset.version,
-                integrated_lufs=stage.qc.loudness.integrated_lufs,
-                verdict=verdict.status,
-            )
 
         delivered = evaluate(profile, pr.stages[-1].qc)
         target, tolerance = profile.loudness_target

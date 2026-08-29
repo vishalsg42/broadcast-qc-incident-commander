@@ -113,6 +113,7 @@ export interface AwaitingTelemetryEvent {
 export interface GenericEvent {
   kind:
     | "started"
+    | "stage_started"
     | "investigation_started"
     | "phase_started"
     | "escalated"

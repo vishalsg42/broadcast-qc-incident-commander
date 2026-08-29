@@ -107,11 +107,16 @@ def main() -> int:
         print(f"  {name:<28} {mark} ({count} results in the last 6h)")
 
     print(
-        "\nEvery panel returned data."
+        "\nEvery panel's query returned data."
         if ok
         else "\nSome panels returned nothing - "
         "run a delivery first, or widen the dashboard time range."
     )
+    # Worth stating plainly: this proves the QUERIES work, not that every panel
+    # can render what they return. A `traces` visualisation given a search rather
+    # than a trace id drew "No data found in response" while this same check
+    # reported twenty results, which is how that panel shipped broken.
+    print("This checks the queries, not the rendering. Open the dashboard too.")
     return 0 if ok else 1
 
 

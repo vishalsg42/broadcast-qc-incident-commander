@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import yaml
+from dotenv import load_dotenv
 
 from agent.annotations import GrafanaWriter, WriterConfig, annotation_text
 from agent.conclusion import (
@@ -49,6 +50,10 @@ from pipeline.remediation import execute_repair
 from pipeline.stages import NORMALIZE, PACKAGE, PresetLibrary, run_pipeline
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Load .env so the script behaves the same however it is invoked -
+# without it, GRAFANA_URL and the tokens are silently absent.
+load_dotenv(ROOT / ".env")
 PROFILE_PATH = ROOT / "pipeline" / "profiles" / "ebu_r128.yaml"
 
 FIXTURES = {
@@ -65,7 +70,7 @@ def rule(title: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--fixture", choices=sorted(FIXTURES), default="fault")
-    ap.add_argument("--grafana", default="http://localhost:3000")
+    ap.add_argument("--grafana", default=None, help="override GRAFANA_URL")
     ap.add_argument("--out-dir", default="out")
     ap.add_argument(
         "--reasoner",
@@ -117,12 +122,12 @@ def main() -> int:
 
     # ---- 2. investigate ------------------------------------------------------
     rule("INVESTIGATION - controller gathers, model interprets")
-    client = GrafanaClient(GrafanaConfig(url=args.grafana))
+    client = GrafanaClient(GrafanaConfig.from_env(args.grafana))
     ledger = EvidenceLedger(run_id=f"inv-{run.run_id}")
     inv = Investigator(client, ledger, run_id=run.run_id, asset_id=run.asset_id)
 
     client.wait_for_logs(
-        f'{{service_name="qc-pipeline"}} | qc_run_id="{run.run_id}"', expected=3, timeout_s=90
+        f'{{service_name="qc-pipeline"}} | qc_run_id="{run.run_id}"', expected=3
     )
 
     baseline = inv.gather_baseline()
@@ -211,7 +216,7 @@ def main() -> int:
     # Write-back happens LAST, with a separate credential, only after the
     # conclusion validated and a human approved.
     rule("WRITE-BACK - separate credential, only after approval")
-    writer = GrafanaWriter(WriterConfig(url=args.grafana))
+    writer = GrafanaWriter(WriterConfig.from_env())
     text = annotation_text(
         asset_id=run.asset_id,
         failing_stage=failing,

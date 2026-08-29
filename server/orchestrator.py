@@ -172,7 +172,7 @@ class Orchestrator:
         reasoner: Reasoner = (
             GeminiReasoner() if reasoner_name == "gemini" else ScriptedReasoner()
         )
-        client = GrafanaClient(GrafanaConfig(url=self.grafana_url))
+        client = GrafanaClient(GrafanaConfig.from_env(self.grafana_url))
         ledger = EvidenceLedger(run_id=f"inv-{pr.run_id}")
         inv = Investigator(client, ledger, run_id=pr.run_id, asset_id=pr.asset_id)
 
@@ -180,7 +180,6 @@ class Orchestrator:
         client.wait_for_logs(
             f'{{service_name="qc-pipeline"}} | qc_run_id="{pr.run_id}"',
             expected=3,
-            timeout_s=90,
         )
 
         baseline = inv.gather_baseline()
@@ -304,7 +303,7 @@ class Orchestrator:
         )
 
         # 7. write-back, last, with a separate credential
-        writer = GrafanaWriter(WriterConfig(url=self.grafana_url))
+        writer = GrafanaWriter(WriterConfig.from_env())
         annotated = writer.annotate(
             text=annotation_text(
                 asset_id=pr.asset_id,

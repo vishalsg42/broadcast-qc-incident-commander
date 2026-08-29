@@ -37,11 +37,32 @@ class GrafanaConfig:
     loki_uid: str = "loki"
     tempo_uid: str = "tempo"
 
+    @property
+    def is_cloud(self) -> bool:
+        return "grafana.net" in self.url
+
+    @property
+    def ingest_timeout_s(self) -> float:
+        """How long telemetry may take to become queryable.
+
+        Local otel-lgtm serves a span within seconds. Grafana Cloud routes
+        through an OTLP gateway and routinely takes over 90s, during which a
+        query returns an empty result that is indistinguishable from "this run
+        does not exist".
+        """
+        return 300.0 if self.is_cloud else 90.0
+
     @classmethod
-    def from_env(cls) -> GrafanaConfig:
-        url = os.environ.get("GRAFANA_URL", "http://localhost:3000").rstrip("/")
+    def from_env(cls, url: str | None = None) -> GrafanaConfig:
+        """Build from the environment, optionally overriding just the URL.
+
+        Constructing `GrafanaConfig(url=...)` directly is a trap: it silently
+        drops the token and the datasource UIDs, so a Cloud stack is queried
+        anonymously against local UIDs and returns nothing. Always come through
+        here.
+        """
         return cls(
-            url=url,
+            url=(url or os.environ.get("GRAFANA_URL", "http://localhost:3000")).rstrip("/"),
             token=os.environ.get("GRAFANA_SERVICE_ACCOUNT_TOKEN") or None,
             loki_uid=os.environ.get("GRAFANA_LOKI_UID", "loki"),
             tempo_uid=os.environ.get("GRAFANA_TEMPO_UID", "tempo"),
@@ -193,6 +214,7 @@ class GrafanaClient:
         flush configuration, and an un-ingested trace is indistinguishable from
         a missing one - both come back as an empty list.
         """
+        timeout_s = timeout_s if timeout_s is not None else self.config.ingest_timeout_s
         deadline = time.time() + timeout_s
         while True:
             traces = self.search_traces(traceql, lookback_s=lookback_s)
@@ -211,7 +233,7 @@ class GrafanaClient:
         logql: str,
         *,
         expected: int = 1,
-        timeout_s: float = 120.0,
+        timeout_s: float | None = None,
         interval_s: float = 3.0,
     ) -> list[LogEntry]:
         """Poll until `expected` lines are queryable, or raise.
@@ -221,6 +243,7 @@ class GrafanaClient:
         Poll for the specific evidence you need. 120s rather than 30s, because
         Tempo in particular can lag well past half a minute.
         """
+        timeout_s = timeout_s if timeout_s is not None else self.config.ingest_timeout_s
         deadline = time.time() + timeout_s
         while True:
             entries = self.query_logs(logql, limit=max(expected, 20))

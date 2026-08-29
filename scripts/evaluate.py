@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import yaml
+from dotenv import load_dotenv
 
 from agent.conclusion import build_conclusion
 from agent.evidence import (
@@ -43,6 +44,10 @@ from pipeline.policy import BLOCKED, Profile, evaluate
 from pipeline.stages import PACKAGE, PresetLibrary, run_pipeline
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Load .env so the script behaves the same however it is invoked -
+# without it, GRAFANA_URL and the tokens are silently absent.
+load_dotenv(ROOT / ".env")
 PROFILE_PATH = ROOT / "pipeline" / "profiles" / "ebu_r128.yaml"
 
 # fixture -> (media, injected package preset, what a correct answer looks like)
@@ -101,13 +106,13 @@ def run_case(
             fixture, False, f"{pr.run_id}: expected BLOCKED, got {delivered.status}"
         )
 
-    client = GrafanaClient(GrafanaConfig(url=grafana))
+    client = GrafanaClient(GrafanaConfig.from_env(grafana))
     ledger = EvidenceLedger(run_id=f"eval-{pr.run_id}")
     inv = Investigator(client, ledger, run_id=pr.run_id, asset_id=pr.asset_id)
     reasoner = GeminiReasoner() if reasoner_name == "gemini" else ScriptedReasoner()
 
     client.wait_for_logs(
-        f'{{service_name="qc-pipeline"}} | qc_run_id="{pr.run_id}"', expected=3, timeout_s=120
+        f'{{service_name="qc-pipeline"}} | qc_run_id="{pr.run_id}"', expected=3
     )
 
     baseline = inv.gather_baseline()
@@ -180,7 +185,7 @@ def run_case(
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", type=int, default=5)
-    ap.add_argument("--grafana", default="http://localhost:3000")
+    ap.add_argument("--grafana", default=None, help="override GRAFANA_URL")
     ap.add_argument("--reasoner", choices=["scripted", "gemini"], default="scripted")
     ap.add_argument("--out", default="docs/RESULTS.md")
     args = ap.parse_args()

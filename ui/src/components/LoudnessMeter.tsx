@@ -21,6 +21,7 @@ export function LoudnessMeter({
   target,
   tolerance,
   blocked,
+  withheld,
   truePeakCeiling,
   maxBodyBlack,
 }: {
@@ -28,12 +29,22 @@ export function LoudnessMeter({
   target: number
   tolerance: number
   blocked: boolean
+  /** The profile cannot be adjudicated here, so no comparison is drawn. */
+  withheld: boolean
   truePeakCeiling: number | null
   maxBodyBlack: number
 }) {
   const bandLeft = pct(target - tolerance)
   const bandWidth = pct(target + tolerance) - bandLeft
-  const deviation = measured === null ? null : measured - target
+  // Withheld means the measurement and the target are different quantities.
+  // Subtracting one from the other would print a confident number that means
+  // nothing - the exact failure this whole system exists to avoid.
+  const deviation = measured === null || withheld ? null : measured - target
+  const reading = withheld
+    ? "var(--color-pending)"
+    : blocked
+      ? "var(--color-blocked)"
+      : "var(--color-inspec)"
   const ticks = [-36, -30, -24, -18, -12]
 
   return (
@@ -49,7 +60,7 @@ export function LoudnessMeter({
         <div
           className="meter text-[3.25rem] leading-none font-semibold"
           style={{
-            color: measured === null ? "var(--color-legend)" : blocked ? "var(--color-blocked)" : "var(--color-inspec)",
+            color: measured === null ? "var(--color-legend)" : reading,
           }}
         >
           {measured === null ? <span className="text-legend">—</span> : measured.toFixed(1)}
@@ -65,6 +76,11 @@ export function LoudnessMeter({
               {deviation.toFixed(1)} LU
             </div>
           )}
+          {withheld && measured !== null && (
+            <div className="legend" style={{ color: "var(--color-pending)" }}>
+              not compared
+            </div>
+          )}
         </div>
       </div>
 
@@ -77,9 +93,11 @@ export function LoudnessMeter({
           style={{
             left: `${bandLeft}%`,
             width: `${bandWidth}%`,
-            background: "color-mix(in srgb, var(--color-inspec) 26%, transparent)",
-            borderLeft: "1px solid var(--color-inspec)",
-            borderRight: "1px solid var(--color-inspec)",
+            background: withheld
+              ? "color-mix(in srgb, var(--color-legend) 14%, transparent)"
+              : "color-mix(in srgb, var(--color-inspec) 26%, transparent)",
+            borderLeft: `1px solid ${withheld ? "var(--color-rule)" : "var(--color-inspec)"}`,
+            borderRight: `1px solid ${withheld ? "var(--color-rule)" : "var(--color-inspec)"}`,
           }}
         />
         {/* Measured needle */}
@@ -88,8 +106,8 @@ export function LoudnessMeter({
             className="absolute top-0 h-4 w-0.5 transition-[left] duration-500 ease-out"
             style={{
               left: `${pct(measured)}%`,
-              background: blocked ? "var(--color-blocked)" : "var(--color-inspec)",
-              boxShadow: `0 0 8px ${blocked ? "var(--color-blocked)" : "var(--color-inspec)"}`,
+              background: reading,
+              boxShadow: `0 0 8px ${reading}`,
             }}
           />
         )}

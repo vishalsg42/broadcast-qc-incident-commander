@@ -177,6 +177,7 @@ export default function ControlRoom() {
                 target={profile?.target_lufs ?? -23}
                 tolerance={profile?.tolerance_lu ?? 0.5}
                 blocked={blocked}
+                withheld={withheld}
                 truePeakCeiling={profile?.true_peak_ceiling ?? null}
                 maxBodyBlack={profile?.max_contiguous_body_black_s ?? 1}
               />

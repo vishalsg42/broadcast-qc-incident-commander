@@ -27,6 +27,14 @@ export function SignalPath({ stages }: { stages: StageEvent[] }) {
             ))
           : stages.map((s) => {
               const bad = s.verdict === "BLOCKED"
+              // A stage that was never judged must not wear the in-spec marker.
+              // Green here would claim a pass the gate explicitly declined to give.
+              const withheld = s.verdict === "UNMEASURABLE"
+              const mark = withheld
+                ? "var(--color-pending)"
+                : bad
+                  ? "var(--color-blocked)"
+                  : "var(--color-inspec)"
               return (
                 <div key={s.stage} className="enter px-4 py-3">
                   <div className="flex items-center justify-between">
@@ -35,13 +43,22 @@ export function SignalPath({ stages }: { stages: StageEvent[] }) {
                       aria-hidden
                       className="h-1.5 w-1.5"
                       style={{
-                        background: bad ? "var(--color-blocked)" : "var(--color-inspec)",
+                        background: mark,
+                        // Hollow, not filled: measured, but not adjudicated.
+                        boxShadow: withheld ? `inset 0 0 0 1px ${mark}` : undefined,
+                        opacity: withheld ? 0.5 : 1,
                       }}
                     />
                   </div>
                   <div
                     className="meter mt-1 text-lg"
-                    style={{ color: bad ? "var(--color-blocked)" : "var(--color-bright)" }}
+                    style={{
+                      color: bad
+                        ? "var(--color-blocked)"
+                        : withheld
+                          ? "var(--color-read)"
+                          : "var(--color-bright)",
+                    }}
                   >
                     {s.integrated_lufs.toFixed(1)}
                   </div>

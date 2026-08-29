@@ -24,6 +24,7 @@ from typing import Any
 import yaml
 
 from agent.annotations import GrafanaWriter, WriterConfig, annotation_text
+from agent.autonomous import AutonomousInvestigator, build_prompt
 from agent.conclusion import adversarial_candidates, build_conclusion, screen_candidate
 from agent.evidence import (
     EvidenceLedger,
@@ -257,6 +258,31 @@ class Orchestrator:
         )
         run.emit("telemetry_ready")
 
+        if reasoner_name == "agentic":
+            # The agent plans its own investigation. Everything after this point
+            # - refusal screening, approval, repair, re-validation, write-back -
+            # is identical, because none of it ever depended on HOW the
+            # conclusion was reached, only on it surviving the validator.
+            conclusion, validation, experiment = self._investigate_agentic(
+                run, pr, profile, allowlist, ledger, client
+            )
+            if conclusion is None:
+                # Screen the adversarial candidates anyway: they test the
+                # validator against this run's ledger, and that is worth showing
+                # whether or not the agent reached an answer.
+                self._screen_refusals(run, ledger, allowlist)
+                run.status = Status.DONE
+                return
+        else:
+            conclusion, validation, experiment = self._investigate_phased(
+                run, pr, profile, allowlist, ledger, inv, reasoner
+            )
+
+        self._screen_and_propose(run, pr, profile, allowlist, ledger, conclusion, validation)
+        return
+
+    def _investigate_phased(self, run, pr, profile, allowlist, ledger, inv, reasoner):
+        """The fixed four-phase investigation. Deterministic and reproducible."""
         baseline = inv.gather_baseline()
         self._interpret(run, reasoner, ledger, Phase.BASELINE, baseline)
 
@@ -298,18 +324,6 @@ class Orchestrator:
                 run, pr, profile, failing, preset, ledger, reasoner
             )
 
-        # 3. the refusal - deterministic, through the production validator
-        for candidate in adversarial_candidates(ledger):
-            result = screen_candidate(candidate, ledger, allowlist)
-            run.emit(
-                "refusal",
-                name=candidate.name,
-                description=candidate.description,
-                refused=not result.ok,
-                reason=result.errors[0] if result.errors else "",
-            )
-
-        # 4. conclusion
         conclusion = build_conclusion(
             ledger,
             source_in_spec=source_ok,
@@ -326,6 +340,31 @@ class Orchestrator:
             delivery_profile_id=profile.id,
         )
         validation = validate_conclusion(conclusion, ledger, allowlist=allowlist)
+        return conclusion, validation, experiment.to_dict() if experiment else None
+
+    def _screen_and_propose(self, run, pr, profile, allowlist, ledger, conclusion, validation):
+        """Refusal screening, the conclusion, and everything after it.
+
+        Shared by both investigation paths on purpose: the safety machinery
+        never depended on HOW a conclusion was reached, only on it surviving the
+        same validator and the same allowlist.
+        """
+        # Derived from the run rather than carried out of the investigation:
+        # the write-back describes what the PIPELINE did, and must read the same
+        # whichever path reached the conclusion.
+        failing_result = (
+            next((r for r in pr.stages if evaluate(profile, r.qc).status == BLOCKED), None)
+            or pr.stages[-1]
+        )
+        failing = failing_result.stage
+        preset_id = failing_result.preset.id
+        preset_version = failing_result.preset.version
+        target = profile.loudness_target[0]
+
+        # 3. the refusal - deterministic, through the production validator
+        self._screen_refusals(run, ledger, allowlist)
+
+        # 4. conclusion
         run.emit(
             "conclusion",
             accepted=validation.ok,
@@ -417,6 +456,74 @@ class Orchestrator:
             incident_detail=incident.detail,
         )
         run.status = Status.DONE
+
+    def _screen_refusals(self, run, ledger, allowlist):
+        """Run the adversarial candidates through the production validator."""
+        for candidate in adversarial_candidates(ledger):
+            result = screen_candidate(candidate, ledger, allowlist)
+            run.emit(
+                "refusal",
+                name=candidate.name,
+                description=candidate.description,
+                refused=not result.ok,
+                reason=result.errors[0] if result.errors else "",
+            )
+
+    def _investigate_agentic(self, run, pr, profile, allowlist, ledger, client):
+        """Hand the investigation to an agent that plans it.
+
+        Returns (conclusion, validation, experiment). A None conclusion means the
+        agent did not reach one - reported as an escalation rather than a crash,
+        because "I could not establish this" is a legitimate outcome and the
+        alternative is a confident answer nobody checked.
+        """
+        delivered = pr.stages[-1].qc.loudness.integrated_lufs
+        investigator = AutonomousInvestigator(
+            ledger=ledger,
+            pipeline_run=pr,
+            profile=profile,
+            allowlist=allowlist,
+            on_event=lambda kind, **kw: run.emit(kind, **kw),
+        )
+        prompt = build_prompt(
+            pipeline_run=pr,
+            profile=profile,
+            allowlist=allowlist,
+            delivered_lufs=delivered,
+            grafana_config=client.config,
+        )
+        result = investigator.investigate(prompt)
+        run.emit(
+            "agent_finished",
+            tool_calls=len(result.calls),
+            llm_calls=result.llm_calls,
+            tools_used=result.tools_used,
+            budget_exhausted=result.budget_exhausted,
+        )
+
+        # Surface the agent's evidence in the same table the phased path fills,
+        # so the UI does not need to know which investigation ran.
+        for step in ledger.steps:
+            run.emit(
+                "evidence",
+                phase=step.phase.value,
+                step_id=step.step_id,
+                query=step.query_used,
+                query_hash=step.query_hash,
+                raw_result_ref=step.raw_result_ref,
+                finding=step.finding,
+                supports=step.supports,
+            )
+
+        if result.conclusion is None:
+            reason = (
+                "The investigation exhausted its budget without reaching a conclusion."
+                if result.budget_exhausted
+                else "The agent could not establish a cause from the available evidence."
+            )
+            run.emit("escalated", reason=reason)
+            return None, None, result.experiment
+        return result.conclusion, result.validation, result.experiment
 
     def _run_experiment(self, run, pr, profile, failing_stage, suspect, ledger, reasoner):
         """Test the suspect preset instead of inferring from its filter string.

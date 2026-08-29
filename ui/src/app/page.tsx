@@ -109,6 +109,7 @@ export default function ControlRoom() {
             >
               <option value="scripted">Scripted</option>
               <option value="gemini">Gemini</option>
+              <option value="agentic">Agentic</option>
             </select>
             <button
               onClick={() => selectedId && start(fixture, reasoner, selectedId)}

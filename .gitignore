@@ -16,3 +16,4 @@ out/
 .gcloud/
 deploy.env.yaml
 .demo_token
+bin/mcp-grafana

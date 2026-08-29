@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import yaml
 
+from agent.annotations import GrafanaWriter, WriterConfig, annotation_text
 from agent.conclusion import (
     adversarial_candidates,
     build_conclusion,
@@ -205,6 +207,31 @@ def main() -> int:
     print(f"  {repair.message}")
     print(f"  new artefact: {repair.output_path}")
     print(f"\n  {'DELIVERY CLEARED' if repair.resolved else 'STILL BLOCKED'}")
+
+    # Write-back happens LAST, with a separate credential, only after the
+    # conclusion validated and a human approved.
+    rule("WRITE-BACK - separate credential, only after approval")
+    writer = GrafanaWriter(WriterConfig(url=args.grafana))
+    text = annotation_text(
+        asset_id=run.asset_id,
+        failing_stage=failing,
+        preset_id=preset_id,
+        preset_version=preset_version,
+        measured=run.stages[-1].qc.loudness.integrated_lufs,
+        target=profile.loudness_target[0],
+        resolved=repair.resolved,
+    )
+    annotated = writer.annotate(
+        text=text,
+        tags=["qc", "delivery", f"preset:{preset_id}", f"stage:{failing}"],
+        time_ms=int(time.time() * 1000),
+    )
+    print(f"  annotation : {'OK' if annotated.ok else 'FAILED'} - {annotated.detail}")
+    incident = writer.create_incident(
+        title=f"Delivery blocked: {run.asset_id} out of spec at {failing}"
+    )
+    print(f"  incident   : {'OK' if incident.ok else 'skipped'} - {incident.detail}")
+
     return 0 if repair.resolved else 1
 
 

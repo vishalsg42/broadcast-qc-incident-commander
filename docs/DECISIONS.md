@@ -534,3 +534,46 @@ preset changed in the future. Moved to `04:02Z`. Note that `RECENT_CHANGE_DAYS`
 is 7, so a run more than a week after that date correctly reports "preset
 SELECTION rather than a preset change" instead — the second branch, working as
 designed.
+
+## D27 — Restoring autonomy without giving up a boundary
+
+The four-phase investigation was not an agent. `scripts/evaluate.py --reasoner
+scripted` scored 3/3 with **no AI at all**, and BASELINE and DIVERGENCE handed
+the model a dict already containing `source_in_spec` and `first_failing_stage` —
+a frontier model paid to rephrase a boolean. In an agentic competition that is
+indefensible, and three independent reviews said so.
+
+The model now plans its own investigation. Its Grafana surface is the **official
+Grafana MCP server** — the managed protocol adapter the partner track describes —
+filtered to six read-only tools out of the 74 it exposes.
+
+**What made this safe was not the prompt.** Three refusals replace what a fixed
+sequence used to guarantee structurally:
+
+- **An evidence floor.** One query and an assertion is not an investigation.
+  Set at two kinds, not three: a higher floor is unreachable for a fault that
+  arrived with the source, where there is no preset to look up and no earlier
+  version to test, so the agent could gather forever and never clear it.
+- **A claim-source table.** `validate_conclusion` proves a cited step *exists*;
+  it cannot prove the step *supports* the claim. Moving citation authorship from
+  `build_conclusion()` to the model made that gap matter, so each claim type is
+  bound to the evidence that can bear on it. The one that earns its keep is
+  `EXPERIMENT`: without it, "I tested it and measured +6.1 LU" citing a preset
+  lookup passes every structural check with no experiment ever run.
+- **A requirement to test before blaming.** This project's own standard, applied
+  to the agent. Enforced in code rather than requested in the prompt, because
+  "please test your hypothesis" is a request and this is a requirement.
+
+All three fired against the real model, and it corrected itself each time.
+
+**What the reviews caught before this shipped.** The plan's headline claim was
+inoperative: `observe()` derived step ids from `len(_steps)`, which only grows on
+interpretation, so consecutive observations all minted `step-01` and overwrote
+each other's raw results. The plan also asserted evidence binding got *stronger*;
+it gets weaker in exactly one direction, and `evidence.py` already said so.
+
+**The honest limit is unchanged.** Nothing here verifies reasoning. A cited step
+is real and of the right kind; whether it entails the claim is not checked, and
+no wording in this repository should suggest otherwise.
+
+`--reasoner scripted` is untouched and remains the reproducible path.

@@ -2,8 +2,18 @@
 
 ## The one rule everything follows
 
-> **The model interprets and proposes. Deterministic code gathers, adjudicates
-> and executes.**
+> **The model plans, hypothesises and tests. Deterministic code executes every
+> query, mints the provenance for what actually ran, adjudicates the result, and
+> holds the only key to any action.**
+
+This used to read *"the model interprets and proposes; deterministic code
+gathers"* — and that was accurate, which was the problem. The investigation was
+four hardcoded queries and the model described the results, two of them from a
+dict that already contained the answer. `--reasoner scripted` scored the same
+with no AI at all, so the model was not load-bearing.
+
+The model now chooses its tools, decides when it has enough, and can run an
+experiment to test a hypothesis. **Not one boundary moved to allow that.**
 
 Every boundary below exists to keep that true under adversarial conditions —
 including an adversarial *model*. The design assumes the model may be wrong,
@@ -14,13 +24,16 @@ to matter.
 
 ## Trust boundaries
 
-Three things the model can never do, enforced structurally rather than by
+Things the model can never do, enforced structurally rather than by
 prompting:
 
 | The model cannot… | Enforced by |
 |---|---|
 | Decide whether an asset is compliant | `pipeline/policy.py` — zero AI, pure function, called to block *and* to clear |
-| Claim it ran a query it did not run | Controller calls `EvidenceLedger.observe()` *after* execution and binds phase, query, hash and raw-result reference |
+| Claim it ran a query it did not run | The controller executes every tool and mints the `step_id` inside `after_tool_callback`, **before the result reaches the model**. An id it did not cause to exist is an id it cannot obtain. |
+| Attribute a failure to a preset it did not test | `conclude` refuses an attribution with no experiment in the ledger. A preset that ran is not a preset that caused. |
+| Rest a measured claim on evidence that is not the measurement | `CLAIM_SOURCES` binds each claim type to the evidence that can support it. Without it, "I measured +6.1 LU" citing a preset lookup validates cleanly with no experiment run. |
+| See a Grafana tool that writes | Its toolbox is a six-tool read-only allowlist out of the MCP server's 74. The write path is a separate module with a separate credential. |
 | Execute anything | Three allowlisted action ids; `pipeline/remediation.py` re-validates before running; execution authority is IAM on the worker |
 
 Prompting is not a boundary. Neither is tool filtering. **Credentials are** — the

@@ -113,6 +113,17 @@ class GrafanaWriter:
                 False,
                 "Grafana IRM not available (Cloud-only feature); annotation still written",
             )
+        if status == 500 and "Counters_orgID_fk" in str(payload):
+            # Grafana's own IRM database has no Counters row for this org, so
+            # incident IDs cannot be allocated. Reads succeed and writes fail.
+            # Nothing here can repair it - it is server-side state.
+            return WriteResult(
+                "incident",
+                False,
+                "Grafana IRM is not initialised for this org (incident-ID counter "
+                "missing). Open Incidents once in the Grafana UI to provision it. "
+                "Annotation still written.",
+            )
         if status >= 400:
             return WriteResult("incident", False, f"HTTP {status}: {payload}")
         incident_id = None

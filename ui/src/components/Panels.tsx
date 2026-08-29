@@ -1,8 +1,10 @@
 "use client"
 
 import { StageChart } from "./StageChart"
-import { STAGE_PLAIN } from "@/lib/types"
+import { STAGE_PLAIN, TOOL_PLAIN } from "@/lib/types"
 import type {
+  AgentCall,
+  AgentFinishedEvent,
   ApprovalEvent,
   ConclusionEvent,
   ExperimentEvent,
@@ -483,6 +485,88 @@ export function ExperimentPanel({
         </div>
         <p className="legend mt-2 leading-relaxed">{experiment.caveat}</p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * What the agent chose to do.
+ *
+ * The difference between an agent and a script is not visible in a result - both
+ * produce steps in a list. It is visible in the SEQUENCE: tools picked in an
+ * order nobody fixed, a refusal, and the agent trying again differently.
+ *
+ * So the refusals are shown rather than hidden. "conclude - refused: no
+ * experiment was run" followed by the agent running the experiment is the
+ * clearest evidence on the page that something is actually deciding.
+ */
+export function AgentPanel({
+  calls,
+  summary,
+}: {
+  calls: AgentCall[]
+  summary: AgentFinishedEvent | null
+}) {
+  if (calls.length === 0) return null
+  return (
+    <div className="panel">
+      <div className="flex items-baseline justify-between border-b border-rule px-4 py-2.5">
+        <span className="legend">What the agent decided to do</span>
+        {summary && (
+          <span className="legend">
+            {summary.tool_calls} tool calls · {summary.llm_calls} model calls
+          </span>
+        )}
+      </div>
+      <ol className="divide-y divide-rule/60">
+        {calls.map((call, i) => (
+          <li key={`${call.tool}-${i}`} className="enter flex gap-3 px-4 py-2.5">
+            <span className="meter w-5 shrink-0 text-[0.6875rem] text-legend">
+              {i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[0.8125rem] text-bright">
+                  {TOOL_PLAIN[call.tool] ?? call.tool}
+                </span>
+                <span className="meter text-[0.625rem] text-legend">{call.tool}</span>
+              </div>
+              {call.status === "refused" && call.detail && (
+                <p
+                  className="mt-1 text-[0.75rem] leading-snug"
+                  style={{ color: "var(--color-pending)" }}
+                >
+                  refused — {call.detail}
+                </p>
+              )}
+            </div>
+            <span
+              className="legend shrink-0"
+              style={{
+                color:
+                  call.status === "refused"
+                    ? "var(--color-pending)"
+                    : call.status === "running"
+                      ? "var(--color-legend)"
+                      : "var(--color-inspec)",
+              }}
+            >
+              {call.status === "running" ? (
+                <span className="working">running</span>
+              ) : call.status === "refused" ? (
+                "refused"
+              ) : (
+                "done"
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {summary?.budget_exhausted && (
+        <p className="legend border-t border-rule px-4 py-2.5">
+          The agent reached its investigation budget before concluding.
+        </p>
+      )}
     </div>
   )
 }

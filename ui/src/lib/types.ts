@@ -116,6 +116,9 @@ export interface GenericEvent {
     | "stage_started"
     | "experiment_started"
     | "experiment_failed"
+    | "tool_started"
+    | "tool_result"
+    | "tool_failed"
     | "investigation_started"
     | "phase_started"
     | "escalated"
@@ -142,6 +145,7 @@ export type RunEvent =
   | AwaitingTelemetryEvent
   | UnmeasurableEvent
   | ExperimentEvent
+  | AgentFinishedEvent
   | GenericEvent
 
 export interface Profile {
@@ -163,6 +167,21 @@ export interface Profile {
 export interface ProfileList {
   default: string
   profiles: Profile[]
+}
+
+export interface AgentFinishedEvent {
+  kind: "agent_finished"
+  tool_calls: number
+  llm_calls: number
+  tools_used: string[]
+  budget_exhausted: boolean
+}
+
+/** One tool the agent chose, and how it went. */
+export interface AgentCall {
+  tool: string
+  status: "running" | "ok" | "refused"
+  detail?: string
 }
 
 export interface ExperimentEvent {
@@ -214,6 +233,18 @@ export const PHASE_QUESTIONS: Record<string, string> = {
  * of spec at package", so renaming the column would break the link between what
  * the reader sees and what the system says.
  */
+export const TOOL_PLAIN: Record<string, string> = {
+  query_loki_logs: "read the pipeline logs",
+  list_loki_label_names: "find out what the logs record",
+  list_loki_label_values: "find out what the logs record",
+  list_datasources: "find the telemetry sources",
+  "tempo_traceql-search": "find the trace for this delivery",
+  "tempo_get-trace": "read which settings each step used",
+  get_preset_definition: "look up what a setting does",
+  run_preset_experiment: "TEST the suspected setting",
+  conclude: "submit its conclusion",
+}
+
 export const STAGE_PLAIN: Record<string, string> = {
   ingest: "file received",
   normalize: "volume corrected",

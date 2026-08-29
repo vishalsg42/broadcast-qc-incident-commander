@@ -7,6 +7,8 @@ import type {
   TelemetryProgressEvent,
   ConclusionEvent,
   EvidenceEvent,
+  AgentCall,
+  AgentFinishedEvent,
   ExperimentEvent,
   RefusalEvent,
   RepairedEvent,
@@ -38,6 +40,9 @@ export interface RunState {
   /** Set while the controller is re-running the stage to test the suspect. */
   experimentRunning: boolean
   experiment: ExperimentEvent | null
+  /** The tools the agent chose, in the order it chose them. */
+  agentCalls: AgentCall[]
+  agentSummary: AgentFinishedEvent | null
   unmeasurable: UnmeasurableEvent | null
   error: string | null
   ingest: { backend: string; elapsed: number; timeout: number; found: number; expected: number } | null
@@ -60,6 +65,8 @@ const EMPTY: RunState = {
   activePhase: null,
   experimentRunning: false,
   experiment: null,
+  agentCalls: [],
+  agentSummary: null,
   unmeasurable: null,
   error: null,
   ingest: null,
@@ -145,6 +152,18 @@ export function useRun() {
   return { state, start, approve }
 }
 
+function _settle(
+  calls: AgentCall[],
+  status: AgentCall["status"],
+  detail?: string,
+): AgentCall[] {
+  const i = calls.map((c) => c.status).lastIndexOf("running")
+  if (i < 0) return calls
+  const next = [...calls]
+  next[i] = { ...next[i], status, detail }
+  return next
+}
+
 function reduce(s: RunState, e: RunEvent): RunState {
   switch (e.kind) {
     case "stage_started":
@@ -153,6 +172,25 @@ function reduce(s: RunState, e: RunEvent): RunState {
       // The stage that just finished is no longer in progress. Cleared here
       // rather than on the next start, so the gap between stages reads as done.
       return { ...s, stages: [...s.stages, e as StageEvent], activeStage: null }
+    case "tool_started": {
+      const tool = String((e as { tool?: string }).tool ?? "")
+      return { ...s, agentCalls: [...s.agentCalls, { tool, status: "running" }] }
+    }
+    case "tool_result":
+      return { ...s, agentCalls: _settle(s.agentCalls, "ok") }
+    case "tool_failed":
+      // A refused tool is the guardrails working, not the run failing - the
+      // agent reads the reason and tries again.
+      return {
+        ...s,
+        agentCalls: _settle(
+          s.agentCalls,
+          "refused",
+          String((e as { error?: string }).error ?? ""),
+        ),
+      }
+    case "agent_finished":
+      return { ...s, agentSummary: e as AgentFinishedEvent }
     case "experiment_started":
       return { ...s, experimentRunning: true }
     case "experiment":

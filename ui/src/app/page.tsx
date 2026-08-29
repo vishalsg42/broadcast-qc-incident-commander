@@ -9,6 +9,7 @@ import { LoudnessMeter } from "@/components/LoudnessMeter"
 import {
   AllowlistPanel,
   AttributionPanel,
+  AgentPanel,
   ConclusionPanel,
   ExperimentPanel,
   ProposalPanel,
@@ -204,6 +205,7 @@ export default function ControlRoom() {
               />
             )}
             <UnmeasurablePanel event={state.unmeasurable} />
+            <AgentPanel calls={state.agentCalls} summary={state.agentSummary} />
             <EvidenceTable rows={state.evidence} activePhase={state.activePhase} />
             <ExperimentPanel
               running={state.experimentRunning}

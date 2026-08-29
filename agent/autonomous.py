@@ -431,9 +431,13 @@ class AutonomousInvestigator:
             return None
 
         # conclude() is a submission, not an observation - it must not become
-        # evidence that a later claim could then cite.
+        # evidence that a later claim could then cite. It still reports, or the
+        # UI shows the agent's last step running forever.
         if tool.name == "conclude":
             self.calls.append(ToolCall(tool.name, _short(args), ok=True))
+            self._emit(
+                "tool_result", tool=tool.name, step_id=None, phase=None, summary="accepted"
+            )
             return None
 
         phase = TOOL_PHASE.get(tool.name, Phase.DIVERGENCE)

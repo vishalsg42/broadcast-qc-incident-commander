@@ -577,3 +577,57 @@ is real and of the right kind; whether it entails the claim is not checked, and
 no wording in this repository should suggest otherwise.
 
 `--reasoner scripted` is untouched and remains the reproducible path.
+
+## D28 - What two reviews found after the agent shipped
+
+Three risks were raised and I planned three fixes. Independent review read the
+real code and the real MCP schemas, and **the central fix was wrong, one item
+was actively harmful, and the worst defect was not in the plan at all.** Recorded
+because the misses are more instructive than the fixes.
+
+**A failed tool call could be cited as evidence.** `_after_tool` treated a call
+as failed only on `{"ok": False}`, the shape the three local tools use. The six
+MCP tools never return `ok`; they return `{"content": [...], "isError": true}`,
+and ADK carries a helper for the isError/is_error spelling difference between
+MCP 1.x and 2.x. So an errored Grafana call minted a `step_id` and was recorded
+as SUPPORTING. If the Grafana credential lapses, every tool returns 401, two
+failures clear the evidence floor, and the agent reaches a confident conclusion
+built on authentication errors that passes every validator - because the steps
+exist and their phases are ones the claim may rest on. The project's own logs had
+shown this happening and nobody read them.
+
+**Artefacts outlived everything.** `QCIC_OUT_DIR` is `/tmp/out`, which on Cloud
+Run is tmpfs counted against instance memory, and nothing deleted from it. About
+25MB per run, roughly sixty runs to an OOM kill that takes all approval state
+with it, on an instance pinned with `min-instances=1`. Meanwhile the fix I had
+planned bounded a dict holding half a megabyte. Right instinct, wrong object, off
+by three orders of magnitude.
+
+**The clamp was written without reading the schemas.** I planned to clamp a
+`limit` on "query tools". Four of the six do not accept one, and the two Loki
+discovery tools declare `additionalProperties: false` and reject it outright, so
+the clamp would have broken the model's own discovery calls. The premise was
+false as well: mcp-grafana already caps Loki at 100 rows and defaults to 10 when
+no limit is given, making the case I called dangerous the safest one. What
+actually shrinks the payload is `format: compact` - 74KB against 186KB with every
+row retained.
+
+**Lowering Cloud Run's containerConcurrency would have made things worse.** It
+counts HTTP requests. One page load is eighteen static assets over up to six
+parallel connections, and an SSE stream holds a slot for the length of a run.
+Dropping it to 4 would have left four judges watching runs with no capacity to
+load the page. The thing that needed bounding was the work - one ffmpeg pass
+saturates both vCPUs - so concurrent runs are capped in the orchestrator instead.
+
+**`InMemoryRunner` stays, and the reason matters.** It is genuinely released per
+investigation, but *because the runner is constructed as a local inside
+`_investigate_async`* and the whole session service is collected when the
+coroutine returns. `delete_session` is never called. Hoist the runner to
+`__init__` for reuse and it becomes a real unbounded leak with no test to catch
+it. The property depends on that locality, so it is written down here.
+
+**The process lesson.** After a `.replace()` silently no-opped, I noted that
+every edit should assert its anchor. That was the wrong lesson: asserting the
+anchor would only have made the wrong code land reliably. The miss was writing a
+clamp for a parameter without once running `tools/list` against the server being
+clamped. One command would have settled it.

@@ -1,5 +1,26 @@
 # Submission - video script and Devpost draft
 
+## If the hosted demo is down, run this
+
+Everything except the agent runs with **no Grafana Cloud, no Vertex AI and no
+GCP project at all**:
+
+```bash
+./scripts/make_fixtures.sh
+docker compose -f docker/docker-compose.yml up -d
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python scripts/demo.py --fixture fault
+```
+
+That exercises the real ffmpeg pipeline, the deterministic gate, the evidence
+ledger, the citation validator, all four adversarial refusals, the approval
+handshake, the repair, and the re-validation by the same gate. Add
+`uvicorn server.app:app --port 8080` for the control room in a browser.
+
+Put this at the top of the Devpost writeup too. A judge who hits a dead link and
+finds working instructions in the first screen scores it very differently from
+one who does not.
+
+
 Two rules that come from a simulated judging panel and are worth obeying:
 
 **Three minutes is almost entirely screen with things happening.** The instinct

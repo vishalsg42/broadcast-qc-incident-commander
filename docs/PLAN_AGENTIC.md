@@ -1,4 +1,4 @@
-# Plan — from narrated script to a genuine agent
+# Plan - from narrated script to a genuine agent
 
 ## The problem, stated without flattery
 
@@ -43,7 +43,7 @@ and no agency.
 
 ---
 
-## Phase A — Causal verification by experiment (half day)
+## Phase A - Causal verification by experiment (half day)
 
 **The single best change in this plan.** It fixes the sharpest criticism, uses
 infrastructure that already exists, and cannot destabilise the running system
@@ -51,8 +51,8 @@ because it only adds a step.
 
 Today the CAUSE phase looks at the string `pan=stereo|c0=c0+c1|c1=c0+c1` and
 reasons that it probably raised the loudness. That is an educated guess about a
-string. We already hedge the wording — the claim says *"Most likely introducing
-configuration"* at medium confidence — but hedging is a mitigation, not evidence.
+string. We already hedge the wording - the claim says *"Most likely introducing
+configuration"* at medium confidence - but hedging is a mitigation, not evidence.
 
 **New tool: `simulate_audio_filter(preset_id)`**
 
@@ -84,7 +84,7 @@ claim in the system becomes a measurement.
 
 ---
 
-## Phase B — A read-only toolbox and a real agent loop (1 day)
+## Phase B - A read-only toolbox and a real agent loop (1 day)
 
 Replace the fixed four phases with a bounded agent that chooses what to look at.
 
@@ -127,12 +127,12 @@ precisely so the working paths stay working.
 
 ---
 
-## Phase C — Prove it can pivot (half day)
+## Phase C - Prove it can pivot (half day)
 
 **Without this, "it adapts" is an unverified claim, and the whole exercise is
 theatre of a different kind.**
 
-Add a fixture whose fault is **not** a preset change — a truncated source, or a
+Add a fixture whose fault is **not** a preset change - a truncated source, or a
 stage that errors. Against it:
 
 - the old fixed loop asks "which preset ran?" and confidently blames a preset
@@ -148,14 +148,14 @@ injection, `server/orchestrator.py` (`FIXTURES`), `scripts/evaluate.py`.
 
 ---
 
-## Phase D — Surface, evaluate, document (half day)
+## Phase D - Surface, evaluate, document (half day)
 
-- **UI**: show the investigation as it happens — each tool the agent chose, why,
+- **UI**: show the investigation as it happens - each tool the agent chose, why,
   and what came back. The evidence table already does most of this; it gains a
   "tool chosen by the agent" column and the experiment result gets its own panel.
 - **Evaluation**: `scripts/evaluate.py` re-run across all fixtures for
   `scripted` / `gemini` / `agentic`, reporting honest k/n per fixture. **A drop
-  in reliability must be reported, not hidden** — that comparison is itself a
+  in reliability must be reported, not hidden** - that comparison is itself a
   finding worth publishing.
 - **Docs**: D27 recording why autonomy was restored and what still constrains it.
 
@@ -167,7 +167,7 @@ The suggestion is good in principle and wrong for us right now.
 
 Our Grafana holds telemetry for the runs we have actually made. **There is no
 fleet.** To report "14 other assets are affected" we would have to manufacture
-those 14 runs — fabricating evidence, in a project whose entire pitch is that it
+those 14 runs - fabricating evidence, in a project whose entire pitch is that it
 refuses to fabricate evidence. A judge who spots that has found something much
 worse than a missing feature.
 
@@ -180,10 +180,10 @@ real count even when that count is 2; and never imply the others are broken.
 
 | Phase | Cost | Risk | Value if we stop here |
 |---|---|---|---|
-| **A** — experiment | 0.5d | very low | Weakest claim becomes measured |
-| **B** — agent loop | 1d | **high** | It is genuinely an agent |
-| **C** — pivot proof | 0.5d | low | The agency is demonstrated, not asserted |
-| **D** — surface | 0.5d | low | Judges can see it |
+| **A** - experiment | 0.5d | very low | Weakest claim becomes measured |
+| **B** - agent loop | 1d | **high** | It is genuinely an agent |
+| **C** - pivot proof | 0.5d | low | The agency is demonstrated, not asserted |
+| **D** - surface | 0.5d | low | Judges can see it |
 
 **A first, alone.** It is additive and independently valuable, so the system is
 strictly better even if B is abandoned.
@@ -198,7 +198,7 @@ re-planned rather than forced.
 - `pytest -m "not media and not integration"` stays green and under 5s
 - Every phase keeps `--reasoner scripted` working for reproducible demo takes
 - `evaluate.py` reports honest per-fixture k/n for all three reasoners
-- The agent cannot cite a step the controller did not create — an adversarial
+- The agent cannot cite a step the controller did not create - an adversarial
   test asserts this against the new loop, not just the old one
 - The experiment never writes to the delivered artefact path
 

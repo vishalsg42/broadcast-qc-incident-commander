@@ -63,7 +63,7 @@ export function LoudnessMeter({
             color: measured === null ? "var(--color-legend)" : reading,
           }}
         >
-          {measured === null ? <span className="text-legend">—</span> : measured.toFixed(1)}
+          {measured === null ? <span className="text-legend">-</span> : measured.toFixed(1)}
         </div>
         <div className="pb-2">
           <div className="legend">LUFS</div>
@@ -146,7 +146,7 @@ export function LoudnessMeter({
           </dl>
           <p className="mt-2 text-[0.75rem] leading-snug text-legend">
             Black is a policy, not a boolean. Deliverables mandate head black, bars,
-            slate and break black — a profile that failed on any black frame would
+            slate and break black - a profile that failed on any black frame would
             reject almost every legitimate master.
           </p>
         </details>

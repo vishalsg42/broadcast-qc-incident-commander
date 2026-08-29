@@ -1,8 +1,8 @@
-# Broadcast QC Incident Commander — single container.
+# Broadcast QC Incident Commander - single container.
 #
 # One image, one origin: FastAPI serves both the API and the statically exported
 # UI. That removes the second service, the reverse proxy, CORS preflight, and
-# cross-origin EventSource — four things that each fail differently on Cloud Run.
+# cross-origin EventSource - four things that each fail differently on Cloud Run.
 #
 # ffmpeg is installed as a system package. It is the measurement engine, not a
 # Python dependency, and `pip install ffmpeg` installs a wrapper around a binary
@@ -16,7 +16,7 @@ COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY ui/ ./
-# `output: 'export'` — every page is a client component, so there is nothing to
+# `output: 'export'` - every page is a client component, so there is nothing to
 # render server-side and no Node runtime is needed at all in the final image.
 RUN npm run build
 
@@ -79,6 +79,6 @@ EXPOSE 8080
 # Single worker on purpose. Run state and the approval handshake live in process
 # memory, so a second worker would not see a run started by the first. Scale is
 # not the point of a demo; correctness is.
-# JSON form so the shell is explicit and `exec` replaces it — uvicorn then
+# JSON form so the shell is explicit and `exec` replaces it - uvicorn then
 # receives SIGTERM directly, which is how Cloud Run asks for a graceful stop.
 CMD ["sh", "-c", "exec uvicorn server.app:app --host 0.0.0.0 --port ${PORT} --workers 1 --timeout-keep-alive 75"]

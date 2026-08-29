@@ -22,13 +22,13 @@ The interesting failure is not the obvious one. Here, the normaliser does its jo
 
 | Stage | Preset | Integrated loudness | Verdict |
 |---|---|---|---|
-| ingest | `ingest_passthrough_v1` | **−23.0 LUFS** | PASS — source arrived in spec |
-| normalize | `norm_ebu_v3` | **−22.8 LUFS** | PASS — normalisation was correct |
+| ingest | `ingest_passthrough_v1` | **−23.0 LUFS** | PASS - source arrived in spec |
+| normalize | `norm_ebu_v3` | **−22.8 LUFS** | PASS - normalisation was correct |
 | package | `pkg_h264_v7` | **−16.8 LUFS** | **BLOCKED** |
 
 `pkg_h264_v7` (changed `2026-08-29T04:02:00Z` by `d.okonkwo` under `CHG-4471`,
 approved by `j.reyes`) applies
-`pan=stereo|c0=c0+c1|c1=c0+c1` — an unconditional downmix that sums an
+`pan=stereo|c0=c0+c1|c1=c0+c1` - an unconditional downmix that sums an
 already-stereo bed into both output channels. You cannot guess this from the
 failing number: the source was fine and the normaliser was fine. The
 investigation has to walk the stages.
@@ -59,7 +59,7 @@ nobody can verify. Here there is ground truth at every step:
 
 - **ffmpeg produces a real number.** `ebur128` and `blackdetect` decode the file.
 - **A YAML profile decides.** `pipeline/profiles/ebu_r128.yaml` is the authority
-  on pass/fail — not the code, and never the model.
+  on pass/fail - not the code, and never the model.
 - **The same code that blocked the asset clears the repaired one.** If the agent
   were wrong, re-validation would say so.
 
@@ -91,8 +91,8 @@ repairs always write a **new** artefact rather than overwriting the input.
   uncited, mis-cited and fabricated citations. It does not verify that the
   reasoning is sound.
 - **Correlation is not causation.** A preset changing shortly before a failure is
-  correlation. The conclusion is deliberately hedged — *"most likely introducing
-  configuration"* — and its weight comes from what the preset *does*.
+  correlation. The conclusion is deliberately hedged - *"most likely introducing
+  configuration"* - and its weight comes from what the preset *does*.
 - **Three stages stand in for a nine-stage workflow** (conform, colour, mix,
   mastering, versioning, transcode, wrap, package, deliver).
 - **Black policy covers explicitly scheduled segments only.** Content-aware black
@@ -122,21 +122,21 @@ Which is why a deterministic profile engine beats a model eyeballing frames.
 ### Standards, stated correctly
 
 - **EBU R128** is an EBU *recommendation*, widely adopted by European
-  broadcasters and national regimes — **not EU law**.
+  broadcasters and national regimes - **not EU law**.
 - **The CALM Act** governs the loudness of **commercial advertisements**, via FCC
   rules incorporating ATSC A/85. It is not blanket programme-delivery law.
-- **Netflix's ≈ −27 LKFS is dialogue-gated** — a different measurement that
+- **Netflix's ≈ −27 LKFS is dialogue-gated** - a different measurement that
   `ebur128` does not report. It needs its own profile, not a changed number.
 
 ### The system declines to answer
 
-Pick **Netflix — dialogue-gated** in the profile selector and run the same
+Pick **Netflix - dialogue-gated** in the profile selector and run the same
 asset. The gate returns **UNMEASURABLE**, not a verdict:
 
 > `netflix-dialog-gated` requires `bs1770_dialog_gated`; this probe produces
 > `bs1770_gated`. Requires the dialogue anchor.
 
-Nothing is investigated and no repair is proposed — a defect cannot be
+Nothing is investigated and no repair is proposed - a defect cannot be
 attributed against a specification the pipeline is not equipped to measure. The
 profile's remediation allowlist collapses to `escalate_to_human` alone.
 
@@ -157,19 +157,19 @@ version and come back out of the ACTOR phase as a cited claim:
 > `pkg_h264_v7` v7 was changed by `d.okonkwo` under `CHG-4471`, approved by
 > `j.reyes`
 
-Provenance answers **who to talk to**, never **why the asset failed** — those are
+Provenance answers **who to talk to**, never **why the asset failed** - those are
 separate claims, from separate observations. And a preset with nothing recorded
 reports "no approval recorded" rather than a blank field, because the missing
 audit trail is itself the finding.
 
 Note that `CHG-4471` was properly approved and still shipped a defect. Change
-control is an audit trail, not a technical review — which is precisely why
+control is an audit trail, not a technical review - which is precisely why
 attribution has to be measured from telemetry rather than inferred from process.
 
 Real rejection causes, in rough order of frequency: audio track layout and
 channel mapping, caption conformance, metadata, timecode discontinuity, wrapper
 conformance (AS-11 DPP, IMF), illegal video levels, PSE/Harding. Loudness is
-among the *least* painful — one pass to measure, one to fix. The expensive part
+among the *least* painful - one pass to measure, one to fix. The expensive part
 was never detection; it was attribution.
 
 ---
@@ -203,7 +203,7 @@ was never detection; it was attribution.
 ```
 
 **Signal routing is deliberate.** QC results are *test records*, not operational
-time-series — pushing per-measurement values into Prometheus keyed by `asset_id`
+time-series - pushing per-measurement values into Prometheus keyed by `asset_id`
 is a cardinality anti-pattern. Measurements go to **Loki**; the asset's journey
 goes to **Tempo**; only aggregate health would belong in metrics.
 
@@ -214,7 +214,7 @@ the logs are two disconnected piles and there is no investigation to run.
 
 ## Results
 
-Three fixtures, three runs each, **on Gemini 2.5 Flash via Vertex AI** — the
+Three fixtures, three runs each, **on Gemini 2.5 Flash via Vertex AI** - the
 model writing every finding. The two negative cases matter more than the happy
 one: an agent that only ever finds a fault is a puppet.
 
@@ -227,7 +227,7 @@ one: an agent that only ever finds a fault is a puppet.
 | `source-bad` | reject the source, propose **no** repair | ✅ escalated; re-encoding would mask a supplier problem |
 | `clean` | no investigation, no action | ✅ passed the gate, nothing to attribute |
 
-**Refusals** — four adversarial conclusions, run through the *same* validator as
+**Refusals** - four adversarial conclusions, run through the *same* validator as
 the real path, so the refusal is reproducible rather than dependent on the model
 misbehaving:
 
@@ -251,7 +251,7 @@ is open, so the page loads for anyone.
 Deployment notes worth knowing:
 
 - **One container, one origin.** FastAPI serves both the API and the statically
-  exported UI — no second service, no reverse proxy, no CORS preflight, and no
+  exported UI - no second service, no reverse proxy, no CORS preflight, and no
   cross-origin `EventSource`.
 - **`--max-instances 1`, deliberately.** Run state and the approval handshake
   live in process memory, so a second instance could receive an approval for a
@@ -261,7 +261,7 @@ Deployment notes worth knowing:
   Without it, the first visitor after a cold start waits on ingestion.
 - **Fixtures are generated at image build time**, not shipped. `gcloud run
   deploy --source .` falls back to `.gitignore` when no `.gcloudignore` exists,
-  and `.gitignore` excludes `media/*.mp4` — which silently produced a container
+  and `.gitignore` excludes `media/*.mp4` - which silently produced a container
   with no media at all.
 
 ## Running it
@@ -294,9 +294,9 @@ pytest                                      #  ~4m   adds live Loki/Tempo
 One screen, so nothing about the diagnosis depends on knowing Grafana.
 
 But the Grafana is real, and it is worth opening. Everything the control room
-shows was written there by the pipeline and read back out of it — see below.
+shows was written there by the pipeline and read back out of it - see below.
 
-SMPTE 75% colour bars form the progress spine — the asset takes exactly seven
+SMPTE 75% colour bars form the progress spine - the asset takes exactly seven
 steps here (three pipeline stages, four investigation phases) and 75% bars have
 exactly seven segments, so the most recognisable artifact in broadcast doubles as
 run status. Loudness is shown on a real EBU R128 meter with the target band
@@ -309,12 +309,12 @@ screen throughout, so the constraint is visible rather than asserted at the end.
 
 ## What a run costs
 
-Measured, not estimated — full loop including three real ffmpeg transcodes, the
+Measured, not estimated - full loop including three real ffmpeg transcodes, the
 differential experiment, telemetry ingestion, repair and write-back.
 
 | Reasoner | Median wall clock | Model calls |
 |---|---|---|
-| `scripted` | **42s** | 0 — deterministic stand-in |
+| `scripted` | **42s** | 0 - deterministic stand-in |
 | `agentic` | **59s** | 7 (bounded at 14) |
 
 The agent costs about seventeen seconds and seven Gemini 2.5 Flash calls more
@@ -339,7 +339,7 @@ python scripts/provision_dashboard.py
 ```
 
 It imports `grafana/dashboard.json` and then **runs each panel's query and
-reports whether real data came back** — an empty panel and a broken query look
+reports whether real data came back** - an empty panel and a broken query look
 identical in a screenshot, so the script distinguishes them.
 
 | Where | What is there |
@@ -359,7 +359,7 @@ To look yourself, in Explore:
 { .qc.run_id="<run id>" }
 ```
 
-Note that `service_name` is the only stream label — everything else is structured
+Note that `service_name` is the only stream label - everything else is structured
 metadata and needs a `|` filter. A stack with several Loki datasources will
 default to the wrong one; pick the one with `logs` in its name.
 
@@ -372,15 +372,15 @@ span attributes.
 | | |
 |---|---|
 | Agent | Google Cloud Agent Builder via the ADK 2.8.0, powered by Gemini 2.5 Flash on Vertex AI |
-| Partner | Grafana Cloud — Loki, Tempo, annotations, IRM, read through the official Grafana MCP server |
+| Partner | Grafana Cloud - Loki, Tempo, annotations, IRM, read through the official Grafana MCP server |
 | Measurement | ffmpeg `ebur128`, `blackdetect` |
 | Backend | Python 3.12, FastAPI, OpenTelemetry |
 | Frontend | Next.js 15, Tailwind 4, TanStack Query + Table |
 
 Licensed under Apache-2.0.
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — trust boundaries, signal routing,
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) - trust boundaries, signal routing,
   failure modes, and what this design deliberately does not do.
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — why it is shaped this way,
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) - why it is shaped this way,
   including the decisions that were wrong first time and what changed them.
-- [`docs/RESULTS.md`](docs/RESULTS.md) — generated by `scripts/evaluate.py`.
+- [`docs/RESULTS.md`](docs/RESULTS.md) - generated by `scripts/evaluate.py`.

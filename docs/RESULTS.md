@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Reasoner | `gemini` — gemini-2.5-flash via Vertex AI |
+| Reasoner | `gemini` - gemini-2.5-flash via Vertex AI |
 | Telemetry backend | Grafana Cloud |
 | Measurement | real ffmpeg (`ebur128`, `blackdetect`) |
 

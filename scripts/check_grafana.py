@@ -57,7 +57,7 @@ def main() -> int:
     client = GrafanaClient(GrafanaConfig.from_env())
     try:
         health = client.health()
-        print(f"{OK}reachable — Grafana {health.get('version')}")
+        print(f"{OK}reachable - Grafana {health.get('version')}")
     except GrafanaError as exc:
         print(f"{BAD}{exc}")
         problems.append("check GRAFANA_URL and the service account token")
@@ -94,7 +94,7 @@ def main() -> int:
 
     configured = (os.environ.get("GRAFANA_LOKI_UID"), os.environ.get("GRAFANA_TEMPO_UID"))
     if (loki, tempo) != configured and loki and tempo:
-        print("\n  Put these in .env — Cloud UIDs are stack-specific:")
+        print("\n  Put these in .env - Cloud UIDs are stack-specific:")
         print(f"    GRAFANA_LOKI_UID={loki}")
         print(f"    GRAFANA_TEMPO_UID={tempo}")
 
@@ -119,7 +119,7 @@ def main() -> int:
             try:
                 decoded = base64.b64decode(value).decode()
                 instance = decoded.split(":", 1)[0]
-                print(f"{OK}Authorization decodes — instance id {instance}")
+                print(f"{OK}Authorization decodes - instance id {instance}")
             except Exception:
                 print(f"{BAD}Authorization is not decodable base64")
                 problems.append(
@@ -137,7 +137,7 @@ def main() -> int:
                 if status == 200:
                     print(f"{OK}gateway accepted a test payload (HTTP 200)")
                 elif status == 401:
-                    print(f"{BAD}gateway rejected the credential — HTTP 401: {body}")
+                    print(f"{BAD}gateway rejected the credential - HTTP 401: {body}")
                     problems.append(
                         "OTLP auth failed. If the body says 'no credentials provided', "
                         "the header is being truncated: QUOTE the value in .env."
@@ -157,18 +157,18 @@ def main() -> int:
     result = writer.annotate(
         text="qcic credential check", tags=["qcic-check"], time_ms=int(time.time() * 1000)
     )
-    print(f"{OK if result.ok else BAD}annotation — {result.detail}")
+    print(f"{OK if result.ok else BAD}annotation - {result.detail}")
     if not result.ok:
         problems.append("annotation write failed; the token needs Editor")
 
     incident = writer.create_incident(title="qcic credential check")
     if incident.ok:
-        print(f"{OK}IRM incident — {incident.detail}")
+        print(f"{OK}IRM incident - {incident.detail}")
     elif is_cloud:
-        print(f"{BAD}IRM — {incident.detail}")
+        print(f"{BAD}IRM - {incident.detail}")
         problems.append("IRM unavailable on this Cloud stack; check the IRM app is enabled")
     else:
-        print(f"{WARN}IRM — {incident.detail}")
+        print(f"{WARN}IRM - {incident.detail}")
 
     return report(problems)
 

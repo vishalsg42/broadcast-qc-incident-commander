@@ -23,8 +23,8 @@ import { useRun } from "@/lib/useRun"
 // what the investigation is for. Two of these look identical from the outside
 // and are not the same problem.
 const FIXTURES = [
-  { id: "fault", label: "Audio too loud — setting changed" },
-  { id: "wrong-preset", label: "Audio too loud — wrong setting" },
+  { id: "fault", label: "Audio too loud - setting changed" },
+  { id: "wrong-preset", label: "Audio too loud - wrong setting" },
   { id: "black-fault", label: "Black frames in the programme" },
   { id: "source-bad", label: "Source arrived out of spec" },
   { id: "clean", label: "Nothing wrong" },
@@ -177,7 +177,7 @@ export default function ControlRoom() {
                         : "Awaiting run"}
                   </span>
                   <span className="meter text-[0.6875rem] text-legend">
-                    {state.runId ?? "—"}
+                    {state.runId ?? "-"}
                   </span>
                 </figcaption>
               </figure>

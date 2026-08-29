@@ -24,7 +24,7 @@ Concretely, and these are not negotiable:
 
 1. **`pipeline/policy.py` contains zero AI and decides pass/fail alone.** The
    model may never adjudicate compliance. The code that blocks an asset is the
-   same code that clears the repaired one — that is what makes the agent's
+   same code that clears the repaired one - that is what makes the agent's
    conclusion falsifiable instead of merely plausible.
 2. **The controller binds evidence provenance; the model supplies interpretation
    only.** `phase`, `query_used`, `query_hash`, `raw_result_ref`, `step_id`,
@@ -115,16 +115,31 @@ python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
   validator with no test showing it reject something is indistinguishable from a
   costume.
 
+## Writing
+
+- **Never use an em dash: the character at code point U+2014.** Not in prose, not
+  in comments, not in docstrings, not in commit messages, not in UI copy, not in
+  YAML descriptions. Use a spaced hyphen, a comma, a colon, or two sentences,
+  whichever the sentence actually wants.
+  (The character is named rather than shown, because a file that quotes it as an
+  example is a file that contains one.)
+- **This is enforced, not requested.** `tests/test_writing.py` fails if the
+  character appears anywhere in the tracked source. Run `pytest tests/test_writing.py`
+  or just the fast suite.
+- Prefer plain words over typographic flourish generally. The UI already went
+  through a pass to replace jargon with what a non-specialist would say; written
+  material should hold the same line.
+
 ## Domain facts that are easy to get wrong
 
 - **Black is a POLICY, not a boolean.** Deliverables *mandate* black: head black
   (~10s), bars and tone, slate, 2-pop, black between parts, ad-break black. A
   profile failing on any black frame would reject nearly every legitimate master.
 - **EBU R128** is an EBU *recommendation* widely adopted by European broadcasters
-  and national regimes — **not EU law**.
+  and national regimes - **not EU law**.
 - **The CALM Act** governs the loudness of **commercial advertisements** via FCC
   rules incorporating ATSC A/85. It is not blanket programme-delivery law.
-- **Netflix's ~-27 LKFS is dialogue-gated** — a different measurement that
+- **Netflix's ~-27 LKFS is dialogue-gated** - a different measurement that
   `ebur128` does not report. It needs its own profile, not a changed number.
 - **Integrated loudness only.** Never compare momentary or short-term values
   against an R128 integrated target.
@@ -165,7 +180,7 @@ python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
   structure comes from **typed tool arguments** instead.
 - **A tool must never raise.** ADK turns an exception inside a tool into an
   aborted invocation rather than a retryable response. Return
-  `{"ok": False, "error": ...}` — see `safe_record_interpretation`.
+  `{"ok": False, "error": ...}` - see `safe_record_interpretation`.
 - **`gcloud config configurations` does not isolate ADC.** Use `CLOUDSDK_CONFIG`.
 - **Quote `OTEL_EXPORTER_OTLP_HEADERS` in `.env`.** Its value contains a space,
   so an unquoted line is truncated by the shell at `Basic` and the credential
@@ -184,7 +199,7 @@ python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
 
 ## Hard constraints
 
-- **Runtime AI must be Google only** — Gemini via Vertex AI, plus the Grafana
+- **Runtime AI must be Google only** - Gemini via Vertex AI, plus the Grafana
   partner integration. No LangChain, LlamaIndex, CrewAI, DSPy, OpenAI or
   Anthropic anywhere in the dependency tree.
 - **Never build against the `nexkard-*` / `*-prod` projects.** `guard_env.sh`

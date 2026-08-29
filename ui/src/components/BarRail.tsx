@@ -33,7 +33,7 @@ export function BarRail({
               style={{ background: BAR_COLORS[i] }}
               data-lit={lit}
               data-active={isActive}
-              title={`${step.label}${lit ? " — complete" : isActive ? " — running" : ""}`}
+              title={`${step.label}${lit ? " - complete" : isActive ? " - running" : ""}`}
             >
               <span
                 className="rotate-180 text-[0.625rem] font-bold tracking-[0.18em] uppercase [writing-mode:vertical-rl]"

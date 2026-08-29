@@ -32,7 +32,7 @@ export function IngestWait({
       aria-live="polite"
     >
       <div className="flex items-baseline justify-between gap-4">
-        <span className="legend">Waiting for telemetry — {backend}</span>
+        <span className="legend">Waiting for telemetry - {backend}</span>
         <span className="meter text-sm text-pending">{elapsed.toFixed(0)}s</span>
       </div>
 

@@ -10,7 +10,7 @@
 # approximation is declared below rather than hidden.
 
 id: atsc-a85-tv
-name: ATSC A/85 — US broadcast
+name: ATSC A/85 - US broadcast
 version: 1
 standard: "ATSC A/85 (ITU-R BS.1770)"
 

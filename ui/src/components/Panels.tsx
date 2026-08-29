@@ -55,7 +55,7 @@ export function SignalPath({
                 <div
                   className={`meter mt-1 text-lg text-legend${running ? " working" : ""}`}
                 >
-                  {running ? "measuring" : "—"}
+                  {running ? "measuring" : "-"}
                 </div>
                 <div className="meter mt-1 text-[0.6875rem] text-legend">
                   {running ? "ffmpeg running" : "\u00a0"}
@@ -259,7 +259,7 @@ export function ProposalPanel({
   if (escalation) {
     return (
       <div className="panel border-l-2 p-4" style={{ borderLeftColor: "var(--color-pending)" }}>
-        <span className="legend">Escalated — no repair proposed</span>
+        <span className="legend">Escalated - no repair proposed</span>
         <p className="mt-2 text-sm text-read">{escalation}</p>
       </div>
     )
@@ -271,7 +271,7 @@ export function ProposalPanel({
         className="panel enter border-l-2 p-4"
         style={{ borderLeftColor: "var(--color-pending)" }}
       >
-        <span className="legend">Repair proposed — engineer approval required</span>
+        <span className="legend">Repair proposed - engineer approval required</span>
         <div className="meter mt-2 text-sm text-bright">
           {approval.action_id}({JSON.stringify(approval.params)})
         </div>
@@ -438,7 +438,7 @@ export function ExperimentPanel({
       </div>
 
       <p className="px-4 pt-3 text-[0.8125rem] text-read">
-        Same file, same step, run twice — once with the setting that normally
+        Same file, same step, run twice - once with the setting that normally
         runs, once with the suspected one.
       </p>
 
@@ -536,7 +536,7 @@ export function AgentPanel({
                   className="mt-1 text-[0.75rem] leading-snug"
                   style={{ color: "var(--color-pending)" }}
                 >
-                  refused — {call.detail}
+                  refused - {call.detail}
                 </p>
               )}
             </div>

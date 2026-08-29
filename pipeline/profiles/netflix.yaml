@@ -18,7 +18,7 @@
 # guessing. Refusing to answer is the correct answer here.
 
 id: netflix-dialog-gated
-name: Netflix — dialogue-gated
+name: Netflix - dialogue-gated
 version: 1
 standard: "Netflix Sound Mix Specifications (ITU-R BS.1770, dialog-gated)"
 # One sentence a non-specialist can act on. The standard string above is for

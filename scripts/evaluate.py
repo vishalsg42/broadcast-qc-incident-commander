@@ -158,7 +158,7 @@ def run_case(
     validation = validate_conclusion(conclusion, ledger, allowlist=allowlist)
     if not validation.ok:
         return Outcome(
-            fixture, False, f"{pr.run_id}: validator rejected — {validation.errors[0]}"
+            fixture, False, f"{pr.run_id}: validator rejected - {validation.errors[0]}"
         )
 
     types = {c.claim_type for c in conclusion.claims}
@@ -218,7 +218,7 @@ def main() -> int:
             except Exception as exc:
                 outcome = Outcome(fixture, False, f"raised {type(exc).__name__}: {exc}")
             tallies[fixture].add(outcome)
-            print("ok" if outcome.correct else f"FAIL — {outcome.detail}")
+            print("ok" if outcome.correct else f"FAIL - {outcome.detail}")
 
     elapsed = time.time() - started
     report = render(tallies, args, elapsed)
@@ -271,7 +271,7 @@ def render(tallies: dict[str, Tally], args, elapsed: float) -> str:
         "|---|---|",
         f"| Reasoner | `{args.reasoner}`"
         + (
-            f" — {model} via {via}"
+            f" - {model} via {via}"
             if args.reasoner == "gemini"
             else " (deterministic stand-in)"
         )
@@ -296,7 +296,7 @@ def render(tallies: dict[str, Tally], args, elapsed: float) -> str:
     failures = [(n, f) for n, t in tallies.items() for f in t.failures]
     lines += ["", "## Failures", ""]
     lines += (
-        [f"- `{n}` — {f}" for n, f in failures]
+        [f"- `{n}` - {f}" for n, f in failures]
         if failures
         else [
             "None in this run. A table with only successes in it is not evidence,",

@@ -84,6 +84,7 @@ python scripts/demo.py --fixture fault        # block -> investigate -> repair
 python scripts/demo.py --fixture source-bad   # escalates, proposes NO repair
 python scripts/demo.py --fixture clean        # no investigation, no action
 python scripts/demo.py --reasoner gemini      # same loop, model writes findings
+python scripts/evaluate.py --runs 5           # regenerate docs/RESULTS.md
 
 # control room (two processes)
 uvicorn server.app:app --port 8080            # API + SSE

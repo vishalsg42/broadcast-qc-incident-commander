@@ -1,65 +1,42 @@
-# Transcode presets, versioned.
-#
-# Faults live HERE, as data. Not as `if asset_id == "demo_001"` in the pipeline.
-# Real facilities do not hunt for a broken worker - they hunt for which transcode
-# preset changed, and when. So attribution targets a preset VERSION, and the
-# changed_at timestamps are what make that attribution legible.
-#
-# A delivery preset change is a CONTROLLED change. "preset v7, changed 14:02" is
-# never where the conversation stops - the next questions in the room are who
-# changed it, under what ticket, and who signed it off. Those three fields ride
-# the trace span alongside the version, so the tool can answer them too.
-#
-# The hero fault: normalize does its job correctly, and then PACKAGE remaps audio
-# channels. Defect and cause are in DIFFERENT stages, which is what makes the
-# investigation non-trivial - you cannot guess it from the failing measurement.
-
 normalize:
-  - id: norm_ebu_v3
-    version: 3
-    changed_at: "2026-08-14T09:20:00Z"
-    changed_by: "m.hollis"
-    change_ticket: "CHG-4208"
-    approved_by: "j.reyes"
-    default: true
-    description: "EBU R128 single-pass normalisation to -23 LUFS"
-    audio_filter: "loudnorm=I=-23:TP=-1.5:LRA=11"
-
-  - id: norm_ebu_v2
-    version: 2
-    changed_at: "2026-06-02T11:00:00Z"
-    changed_by: "m.hollis"
-    change_ticket: "CHG-3971"
-    approved_by: "j.reyes"
-    description: "Superseded: normalised to -20 LUFS (old house target)"
-    audio_filter: "loudnorm=I=-20:TP=-1.5:LRA=11"
-
+- id: norm_ebu_v3
+  version: 3
+  changed_at: '2026-08-14T09:20:00Z'
+  changed_by: m.hollis
+  change_ticket: CHG-4208
+  approved_by: j.reyes
+  default: true
+  description: EBU R128 single-pass normalisation to -23 LUFS
+  audio_filter: loudnorm=I=-23:TP=-1.5:LRA=11
+- id: norm_ebu_v2
+  version: 2
+  changed_at: '2026-06-02T11:00:00Z'
+  changed_by: m.hollis
+  change_ticket: CHG-3971
+  approved_by: j.reyes
+  description: 'Superseded: normalised to -20 LUFS (old house target)'
+  audio_filter: loudnorm=I=-20:TP=-1.5:LRA=11
 package:
-  - id: pkg_h264_v6
-    version: 6
-    changed_at: "2026-07-30T16:45:00Z"
-    changed_by: "d.okonkwo"
-    change_ticket: "CHG-4102"
-    approved_by: "j.reyes"
-    default: true
-    description: "H.264 delivery wrap, stereo passthrough"
-    # Channel layout is preserved exactly. Loudness out == loudness in.
-    audio_filter: "anull"
+- id: pkg_h264_v6
+  version: 6
+  changed_at: '2026-07-30T16:45:00Z'
+  changed_by: d.okonkwo
+  change_ticket: CHG-4102
+  approved_by: j.reyes
+  default: true
+  description: H.264 delivery wrap, stereo passthrough
+  audio_filter: anull
+- id: pkg_h264_v7
+  version: 7
+  changed_at: '2026-08-29T04:02:00Z'
+  changed_by: d.okonkwo
+  change_ticket: CHG-4471
+  approved_by: j.reyes
+  description: 'H.264 delivery wrap. Intended to fold a 5.1 M&E bed to stereo, but
+    the downmix is applied unconditionally, so already-stereo material gets both channels
+    summed into each output channel. Picture is untouched; delivered loudness rises
+    well outside R128 tolerance even though the normalise stage did its job correctly.
 
-  - id: pkg_h264_v7
-    version: 7
-    changed_at: "2026-08-29T04:02:00Z"
-    changed_by: "d.okonkwo"
-    change_ticket: "CHG-4471"
-    # Signed off through change control, and still shipped a defect. Approval is
-    # an audit trail, not a technical review - which is the whole reason
-    # attribution has to be measured rather than inferred from process.
-    approved_by: "j.reyes"
-    description: >
-      H.264 delivery wrap. Intended to fold a 5.1 M&E bed to stereo, but the
-      downmix is applied unconditionally, so already-stereo material gets both
-      channels summed into each output channel. Picture is untouched; delivered
-      loudness rises well outside R128 tolerance even though the normalise stage
-      did its job correctly.
-    # A real channel remap: c0 and c1 both become (L+R). ~+5-6 LU.
-    audio_filter: "pan=stereo|c0=c0+c1|c1=c0+c1"
+    '
+  audio_filter: pan=stereo|c0=c0+c1|c1=c0+c1
+  ticket: CHG-4471

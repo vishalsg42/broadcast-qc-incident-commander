@@ -14,6 +14,10 @@ name: EBU R128 — European broadcast delivery
 version: 1
 standard: "EBU R128 / EBU Tech 3341"
 
+plain: >
+  European TV delivery. The programme's overall loudness must sit
+  within half a unit of the target.
+
 measurement:
   # What the probe must be able to produce for this profile to be adjudicated.
   # ffmpeg's ebur128 implements exactly this gating, so R128 is fully measurable.

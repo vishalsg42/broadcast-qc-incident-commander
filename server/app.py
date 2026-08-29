@@ -135,6 +135,9 @@ def _profile_payload(profile) -> dict:
         "id": profile.id,
         "name": profile.name,
         "standard": profile.standard,
+        # Plain-English summary. A reader who does not know what LKFS means
+        # still has to be able to tell what this profile enforces.
+        "plain": profile.plain,
         "version": profile.version,
         "target_lufs": target,
         "tolerance_lu": tolerance,

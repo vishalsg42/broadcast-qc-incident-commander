@@ -145,6 +145,7 @@ export interface Profile {
   id: string
   name: string
   standard: string
+  plain: string
   version: number
   target_lufs: number
   tolerance_lu: number
@@ -167,6 +168,35 @@ export interface UnmeasurableEvent {
   profile_name: string
   requires: string
   reason: string
+  plain_reason: string
+}
+
+/**
+ * What each investigation phase is actually asking.
+ *
+ * BASELINE / DIVERGENCE / ACTOR / CAUSE are precise and mean nothing to a
+ * reader who has not been told what they mean. The question each one answers is
+ * self-explanatory, so the question leads and the phase name follows in small
+ * type for anyone who wants the internal vocabulary.
+ */
+export const PHASE_QUESTIONS: Record<string, string> = {
+  BASELINE: "Did the file arrive already broken?",
+  DIVERGENCE: "Which step changed it?",
+  ACTOR: "Which setting did that step use?",
+  CAUSE: "What does that setting actually do?",
+}
+
+/**
+ * What each pipeline stage does, in ordinary words.
+ *
+ * The stage NAME is kept rather than replaced: the evidence text says "first out
+ * of spec at package", so renaming the column would break the link between what
+ * the reader sees and what the system says.
+ */
+export const STAGE_PLAIN: Record<string, string> = {
+  ingest: "file received",
+  normalize: "volume corrected",
+  package: "wrapped for delivery",
 }
 
 /** The asset's seven steps - the same count as SMPTE 75% colour bars. */

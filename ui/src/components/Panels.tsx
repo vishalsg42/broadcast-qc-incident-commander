@@ -1,6 +1,7 @@
 "use client"
 
 import { StageChart } from "./StageChart"
+import { STAGE_PLAIN } from "@/lib/types"
 import type {
   ApprovalEvent,
   ConclusionEvent,
@@ -45,7 +46,9 @@ export function SignalPath({
           if (!done) {
             return (
               <div key={name} className="px-4 py-3">
-                <div className="legend">{name}</div>
+                <div className="legend">
+                  {name} <span className="text-legend">· {STAGE_PLAIN[name]}</span>
+                </div>
                 <div
                   className={`meter mt-1 text-lg text-legend${running ? " working" : ""}`}
                 >
@@ -70,7 +73,9 @@ export function SignalPath({
           return (
             <div key={name} className="enter px-4 py-3">
               <div className="flex items-center justify-between">
-                <span className="legend">{name}</span>
+                <span className="legend">
+                  {name} <span className="text-legend">· {STAGE_PLAIN[name]}</span>
+                </span>
                 <span
                   aria-hidden
                   className="h-1.5 w-1.5"
@@ -108,7 +113,7 @@ export function SignalPath({
 export function AttributionPanel({ trace }: { trace: TraceEvent | null }) {
   return (
     <div className="panel p-4">
-      <span className="legend">Attributed to</span>
+      <span className="legend">What caused it</span>
       {trace ? (
         <div className="enter mt-2">
           <div className="meter text-lg text-pending">{trace.preset_id}</div>
@@ -126,9 +131,9 @@ export function AttributionPanel({ trace }: { trace: TraceEvent | null }) {
             being hidden - the gap is itself the finding.
           */}
           <div className="mt-3 border-t border-rule pt-3">
-            <span className="legend">Change record</span>
+            <span className="legend">Who changed this setting</span>
             <dl className="mt-2 space-y-1 text-[0.8125rem]">
-              <Row label="By" value={trace.preset_changed_by ?? "not recorded"} />
+              <Row label="Changed by" value={trace.preset_changed_by ?? "not recorded"} />
               <Row label="Ticket" value={trace.preset_change_ticket ?? "not recorded"} />
               <Row
                 label="Approved"
@@ -342,8 +347,11 @@ export function UnmeasurablePanel({ event }: { event: UnmeasurableEvent | null }
         </span>
       </div>
       <p className="mt-3 text-[0.8125rem] leading-relaxed text-read">
-        {event.reason}
+        {event.plain_reason || event.reason}
       </p>
+      {event.plain_reason && (
+        <p className="mt-2 text-[0.75rem] leading-snug text-legend">{event.reason}</p>
+      )}
       <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
         <dt className="legend">Profile</dt>
         <dd className="meter text-[0.75rem] text-read">{event.profile_name}</dd>
@@ -351,8 +359,8 @@ export function UnmeasurablePanel({ event }: { event: UnmeasurableEvent | null }
         <dd className="meter text-[0.75rem] text-read">{event.requires}</dd>
       </dl>
       <p className="legend mt-3 leading-relaxed">
-        No repair is proposed. A defect cannot be attributed against a
-        specification this pipeline is not equipped to measure.
+        Nothing is repaired. You cannot fix a file against a rule you cannot
+        measure, so the system stops rather than guessing.
       </p>
     </div>
   )

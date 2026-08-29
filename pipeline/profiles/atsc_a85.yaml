@@ -14,6 +14,10 @@ name: ATSC A/85 — US broadcast
 version: 1
 standard: "ATSC A/85 (ITU-R BS.1770)"
 
+plain: >
+  US TV delivery. Same measurement as the European standard, with a
+  wider tolerance.
+
 measurement:
   # What the probe must be able to produce for this profile to be adjudicated.
   requires: bs1770_gated

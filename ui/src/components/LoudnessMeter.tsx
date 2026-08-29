@@ -50,7 +50,7 @@ export function LoudnessMeter({
   return (
     <div className="panel p-5">
       <div className="flex items-baseline justify-between">
-        <span className="legend">Integrated loudness</span>
+        <span className="legend">How loud the programme is</span>
         <span className="legend">
           Target {target.toFixed(1)} ±{tolerance} LU
         </span>
@@ -72,8 +72,7 @@ export function LoudnessMeter({
               className="meter text-sm font-medium"
               style={{ color: blocked ? "var(--color-blocked)" : "var(--color-inspec)" }}
             >
-              {deviation >= 0 ? "+" : ""}
-              {deviation.toFixed(1)} LU
+              {Math.abs(deviation).toFixed(1)} LU {deviation >= 0 ? "too loud" : "too quiet"}
             </div>
           )}
           {withheld && measured !== null && (
@@ -121,7 +120,7 @@ export function LoudnessMeter({
       </div>
 
       <div className="mt-6 border-t border-rule pt-4">
-        <span className="legend">Enforced by the gate</span>
+        <span className="legend">The rules being checked</span>
         <dl className="mt-2.5 space-y-1.5">
           <SpecRow
             label="Integrated loudness"

@@ -142,6 +142,16 @@ class Profile:
         return self._d.get("remediation_allowlist", [])
 
     @property
+    def plain(self) -> str:
+        """One sentence a non-specialist can act on."""
+        return (self._d.get("plain") or "").strip()
+
+    @property
+    def plain_unmeasurable_reason(self) -> str:
+        """Why this profile cannot be judged here, in ordinary words."""
+        return (self._d.get("measurement", {}).get("plain") or "").strip()
+
+    @property
     def raw(self) -> dict:
         """Escape hatch for callers that need the whole document."""
         return self._d

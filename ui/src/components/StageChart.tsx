@@ -54,64 +54,71 @@ export function StageChart({
   return (
     <div className="border-b border-rule px-4 pt-3 pb-2">
       <div className="flex items-baseline justify-between">
-        <span className="legend">Loudness across the pipeline</span>
+        <span className="legend">Where the audio changed</span>
         <span className="legend">
-          {withheld ? "no target comparison" : `band ${target.toFixed(1)} ±${tolerance} LU`}
+          {withheld ? "no comparison made" : "green band = acceptable range"}
         </span>
       </div>
 
-      <svg
-        viewBox={`0 0 100 ${H}`}
-        preserveAspectRatio="none"
-        className="mt-2 w-full"
-        style={{ height: H }}
-        role="img"
-        aria-label={
-          withheld
-            ? "Loudness measured at each stage; no target comparison is drawn"
-            : `Loudness at each stage against a target of ${target} LUFS`
-        }
-      >
-        <rect
-          x="0"
-          y={bandTop}
-          width="100"
-          height={bandHeight}
-          fill={
+      {/* The band and the connecting path stretch to fill the width, so the
+          SVG is drawn with preserveAspectRatio="none". That distorts circles
+          into ovals, so the measurement points are HTML on top instead - the
+          viewBox height matches the pixel height, so the same y() maps to both. */}
+      <div className="relative mt-2" style={{ height: H }}>
+        <svg
+          viewBox={`0 0 100 ${H}`}
+          preserveAspectRatio="none"
+          className="absolute inset-0 h-full w-full"
+          role="img"
+          aria-label={
             withheld
-              ? "color-mix(in srgb, var(--color-legend) 12%, transparent)"
-              : "color-mix(in srgb, var(--color-inspec) 18%, transparent)"
+              ? "Loudness measured at each stage; no target comparison is drawn"
+              : `Loudness at each stage against a target of ${target} LUFS`
           }
-        />
-        <line
-          x1="0"
-          x2="100"
-          y1={y(target)}
-          y2={y(target)}
-          stroke={withheld ? "var(--color-rule)" : "var(--color-inspec)"}
-          strokeDasharray="3 3"
-          vectorEffect="non-scaling-stroke"
-        />
-        <polyline
-          points={points}
-          fill="none"
-          stroke="var(--color-legend)"
-          strokeWidth="1.5"
-          vectorEffect="non-scaling-stroke"
-        />
-        {stages.map((s, i) => (
-          <circle
-            key={s.stage}
-            cx={x(i)}
-            cy={y(s.integrated_lufs)}
-            r="2.5"
-            fill={colourFor(s)}
-            stroke="var(--color-panel)"
+        >
+          <rect
+            x="0"
+            y={bandTop}
+            width="100"
+            height={bandHeight}
+            fill={
+              withheld
+                ? "color-mix(in srgb, var(--color-legend) 12%, transparent)"
+                : "color-mix(in srgb, var(--color-inspec) 18%, transparent)"
+            }
+          />
+          <line
+            x1="0"
+            x2="100"
+            y1={y(target)}
+            y2={y(target)}
+            stroke={withheld ? "var(--color-rule)" : "var(--color-inspec)"}
+            strokeDasharray="4 4"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={points}
+            fill="none"
+            stroke="var(--color-legend)"
             strokeWidth="1.5"
             vectorEffect="non-scaling-stroke"
           />
+        </svg>
+
+        {stages.map((s, i) => (
+          <span
+            key={s.stage}
+            aria-hidden
+            className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+            style={{
+              left: `${x(i)}%`,
+              top: y(s.integrated_lufs),
+              background: colourFor(s),
+              boxShadow: "0 0 0 2px var(--color-panel)",
+            }}
+          />
         ))}
-      </svg>
+      </div>
     </div>
   )
 }

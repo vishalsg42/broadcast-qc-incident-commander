@@ -217,6 +217,7 @@ class Orchestrator:
                 profile_name=profile.name,
                 requires=profile.required_measurement,
                 reason=delivered.checks[0].message if delivered.checks else "",
+                plain_reason=profile.plain_unmeasurable_reason,
             )
             run.status = Status.DONE
             return

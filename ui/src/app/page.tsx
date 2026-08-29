@@ -62,12 +62,14 @@ export default function ControlRoom() {
             <h1 className="text-[0.9375rem] font-bold tracking-[0.06em] text-bright uppercase">
               QC Incident Commander
             </h1>
-            <p className="legend mt-0.5">
-              {profile
-                ? `${profile.standard} · ${profile.target_lufs} ±${profile.tolerance_lu} LU` +
-                  (profile.measurable ? "" : " · not measurable here")
-                : "loading delivery profile"}
+            <p className="mt-0.5 text-[0.8125rem] text-read">
+              {profile ? profile.plain : "loading delivery profile"}
             </p>
+            {profile && (
+              <p className="legend mt-0.5">
+                {profile.standard} · {profile.target_lufs} ±{profile.tolerance_lu} LU
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -162,8 +164,8 @@ export default function ControlRoom() {
                       ? "Not judged"
                       : state.verdict
                         ? blocked
-                          ? "Blocked"
-                          : "Cleared"
+                          ? "Cannot be delivered"
+                          : "Ready to deliver"
                         : "Awaiting run"}
                   </span>
                   <span className="meter text-[0.6875rem] text-legend">

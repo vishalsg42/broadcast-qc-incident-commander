@@ -6,6 +6,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table"
+import { PHASE_QUESTIONS } from "@/lib/types"
 import type { EvidenceEvent } from "@/lib/types"
 
 const column = createColumnHelper<EvidenceEvent>()
@@ -26,21 +27,26 @@ export function EvidenceTable({
 }) {
   const columns = [
     column.accessor("step_id", {
-      header: "Step",
+      header: "#",
       cell: (c) => <span className="meter text-legend">{c.getValue()}</span>,
     }),
     column.accessor("phase", {
-      header: "Phase",
+      header: "Question asked",
       cell: (c) => (
-        <span className="legend text-bright">{c.getValue().toLowerCase()}</span>
+        <div>
+          <div className="text-[0.8125rem] text-bright">
+            {PHASE_QUESTIONS[c.getValue()] ?? c.getValue()}
+          </div>
+          <div className="legend mt-0.5">{c.getValue().toLowerCase()}</div>
+        </div>
       ),
     }),
     column.accessor("finding", {
-      header: "Model reading",
+      header: "What the AI concluded",
       cell: (c) => <span className="text-read">{c.getValue()}</span>,
     }),
     column.accessor("query", {
-      header: "Query run by the controller",
+      header: "Search the system ran",
       cell: (c) => (
         <span className="meter block max-w-[26rem] truncate text-[0.6875rem] text-legend">
           {c.getValue()}
@@ -99,12 +105,10 @@ export function EvidenceTable({
       </table>
       {activePhase && (
         <div className="flex items-center gap-3 border-t border-rule px-4 py-3">
-          <span className="working legend text-bright">
-            {activePhase.toLowerCase()}
+          <span className="working text-[0.8125rem] text-bright">
+            {PHASE_QUESTIONS[activePhase] ?? activePhase}
           </span>
-          <span className="legend">
-            controller queried Grafana; the model is reading the result
-          </span>
+          <span className="legend">the AI is reading the search result</span>
         </div>
       )}
     </div>

@@ -21,12 +21,21 @@ id: netflix-dialog-gated
 name: Netflix — dialogue-gated
 version: 1
 standard: "Netflix Sound Mix Specifications (ITU-R BS.1770, dialog-gated)"
+# One sentence a non-specialist can act on. The standard string above is for
+# people who already know what it means; this is for everybody else.
+plain: >
+  Netflix delivery. Loudness is judged only on the dialogue, which this tool
+  cannot measure.
 
 measurement:
   requires: bs1770_dialog_gated
   note: >
     Requires the dialogue anchor. This probe produces BS.1770 gated programme
     loudness only, so the profile cannot be adjudicated here.
+  plain: >
+    Netflix measures loudness using only the parts where people are speaking.
+    This tool measures the whole programme, including music and effects. Those
+    are two different measurements, so any verdict here would be a guess.
 
 loudness:
   integrated_lufs:

@@ -69,6 +69,14 @@ DEFAULT_MODEL = "gemini-2.5-flash"
 # than the run ending the demo. Exceeding it is handled, not crashed on.
 MAX_LLM_CALLS = 14
 
+# Wall clock ceiling on one investigation.
+#
+# MAX_LLM_CALLS bounds calls, not time. A model call that stalls - a hung
+# stream, a quota backoff that never returns - parks the run thread forever, so
+# the `finally` that terminates the MCP subprocess never runs and it lives as
+# long as the instance. Pinned at min-instances=1, that is weeks.
+MAX_INVESTIGATION_SECONDS = 600
+
 # The investigation must actually happen before it can be concluded: one query
 # and an assertion is not an investigation, and min_length=1 on citations is not
 # a standard of evidence.
@@ -88,16 +96,32 @@ MAX_CONCLUDE_ATTEMPTS = 5
 # Running ffmpeg twice is the most expensive thing the agent can ask for.
 MAX_EXPERIMENTS = 2
 
-# Hard ceiling on rows any query may return, clamped by the controller whatever
-# the model asks for. A one-hour window over a busy pipeline is thousands of log
-# lines, and the whole payload would land in the context: slow on camera, and
-# the needle lost in the haystack.
+# Rows a query may return, clamped by the controller whatever the model asks for.
+#
+# ONLY THESE TOOLS ACCEPT A LIMIT. The Loki discovery tools declare
+# additionalProperties: false and REJECT an unexpected `limit` outright, and the
+# Tempo tools ignore it. A category-based clamp would have broken the model's own
+# discovery calls, which is the harm this module works to avoid one layer down.
+ROW_LIMITED_TOOLS = frozenset({"query_loki_logs", "list_datasources"})
 MAX_QUERY_ROWS = 25
+
+# What actually shrinks a Loki payload. `format: compact` groups lines per stream
+# and drops the per-line metadata - code_file_path, code_function_name and
+# friends - which is what the payload is mostly made of. Measured against the
+# live server: 74KB against 186KB at limit=100, with every row retained. The row
+# clamp trims further; this one loses nothing.
+LOKI_COMPACT_FORMAT = "compact"
 
 # Ceiling on what a single tool result contributes to the context. The LEDGER
 # still holds the full payload - that is the audit trail and it is not
 # negotiable - but the model is shown a bounded view of it.
-MAX_TOOL_CHARS = 6000
+#
+# Twenty thousand, not six. At six the cap fired on ordinary results and cost
+# 97% of the data to buy headroom there is forty times more of: thirteen
+# accumulated results at this size is ~23K tokens against a 1M window. With the
+# compact format above it should now essentially never fire, which is what a
+# backstop is for.
+MAX_TOOL_CHARS = 20000
 
 # Which evidence a claim is allowed to rest on. This is what turns the widened
 # Phase enum into a constraint: without it, an EXPERIMENT claim asserting a
@@ -443,7 +467,22 @@ class AutonomousInvestigator:
     # -- provenance --------------------------------------------------------
 
     def _before_tool(self, tool, args, tool_context):
-        """Runs before every executed tool call. Returning a dict skips the tool."""
+        """Runs before every executed tool call. Returning a dict skips the tool.
+
+        Also shapes the query. ADK hands the callback the same dict it will pass
+        to the tool, so mutating it here is what the tool actually receives.
+        """
+        if tool.name in ROW_LIMITED_TOOLS:
+            try:
+                rows = int(args.get("limit", MAX_QUERY_ROWS))
+            except (TypeError, ValueError):
+                rows = MAX_QUERY_ROWS
+            args["limit"] = max(1, min(rows, MAX_QUERY_ROWS))
+        if tool.name == "query_loki_logs":
+            args.setdefault("format", LOKI_COMPACT_FORMAT)
+        # Emitted AFTER shaping, so the control room shows what the boundary
+        # allowed rather than what the model asked for. That distinction is the
+        # whole reason the panel exists.
         self._emit("tool_started", tool=tool.name, args=_short(args))
         return
 
@@ -564,14 +603,22 @@ class AutonomousInvestigator:
         llm_calls = 0
         exhausted = False
         try:
-            async for event in runner.run_async(
-                user_id="investigator",
-                session_id=session.id,
-                new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
-                run_config=RunConfig(max_llm_calls=self.max_llm_calls),
-            ):
-                if event.content and not event.get_function_responses():
-                    llm_calls += 1
+            # A ceiling in seconds, not just in calls, so a stalled model call
+            # cannot hold the thread and the MCP subprocess indefinitely.
+            async with asyncio.timeout(MAX_INVESTIGATION_SECONDS):
+                async for event in runner.run_async(
+                    user_id="investigator",
+                    session_id=session.id,
+                    new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
+                    run_config=RunConfig(max_llm_calls=self.max_llm_calls),
+                ):
+                    if event.content and not event.get_function_responses():
+                        llm_calls += 1
+        except TimeoutError:
+            # Same shape as running out of calls: a finding about the
+            # investigation, not a crash, and the finally still runs.
+            exhausted = True
+            log.warning("agentic investigation exceeded its wall-clock budget")
         except BaseException as exc:  # noqa: BLE001 - re-raised unless it is the budget
             if not _is_budget_exhausted(exc):
                 if _is_unknown_tool(exc):
@@ -751,21 +798,82 @@ def _bounded(payload: dict) -> dict:
 
     The full payload is already in the ledger under its raw_result_ref, so
     nothing is lost for audit. What the model sees is capped, and the cap is
-    announced rather than silently applied - a truncated result the model
-    believes is complete is worse than one it knows is partial.
+    ANNOUNCED - a truncated result the model believes is complete is worse than
+    one it knows is partial.
+
+    Drops whole lines rather than slicing the string. Slicing handed the model a
+    torn JSON document inside a JSON string, and because Loki returns newest
+    first it kept the boilerplate and deleted the oldest entries - which on a run
+    whose ingest stage is the interesting one is exactly the evidence.
     """
-    text = json.dumps(payload, default=str)
-    if len(text) <= MAX_TOOL_CHARS:
+    if _wire_size(payload) <= MAX_TOOL_CHARS:
         return payload
+
+    trimmed = _drop_lines(payload)
+    if trimmed is not None and _wire_size(trimmed) <= MAX_TOOL_CHARS:
+        return trimmed
+
+    # Nothing line-shaped to trim. Say so rather than pretending.
+    text = json.dumps(payload, default=str)
     return {
         "truncated": True,
         "note": (
-            f"This result was {len(text)} characters and has been cut to "
-            f"{MAX_TOOL_CHARS}. Narrow the query rather than assuming what is "
-            "missing."
+            f"This result was {len(text)} characters, past the {MAX_TOOL_CHARS} "
+            "limit, and could not be trimmed by dropping rows. Narrow the query "
+            "rather than assuming what is missing."
         ),
         "partial_result": text[:MAX_TOOL_CHARS],
     }
+
+
+def _wire_size(payload: dict) -> int:
+    """Size once re-serialised into a function response.
+
+    Measuring the inner JSON under-counts: every quote is escaped again when ADK
+    builds the FunctionResponse, so a 6000-character payload arrives as roughly
+    8500. Budget against what actually reaches the model.
+    """
+    return len(json.dumps(json.dumps(payload, default=str)))
+
+
+def _drop_lines(payload: dict) -> dict | None:
+    """Trim an MCP text result by removing whole lines from the end.
+
+    MCP results nest their body as text inside `content`. Dropping trailing
+    lines keeps the structure valid and keeps the OLDEST entries, which is the
+    opposite of what slicing the string did.
+    """
+    content = payload.get("content")
+    if not isinstance(content, list) or not content:
+        return None
+    block = content[0]
+    if not isinstance(block, dict) or not isinstance(block.get("text"), str):
+        return None
+
+    lines = block["text"].splitlines()
+    if len(lines) < 2:
+        return None
+
+    kept = lines
+    while (
+        kept and _wire_size(_rebuilt(payload, kept, len(lines) - len(kept))) > MAX_TOOL_CHARS
+    ):
+        kept = kept[:-1]
+    if not kept:
+        return None
+    return _rebuilt(payload, kept, len(lines) - len(kept))
+
+
+def _rebuilt(payload: dict, kept: list[str], dropped: int) -> dict:
+    out = json.loads(json.dumps(payload, default=str))
+    out["content"][0]["text"] = "\n".join(kept)
+    if dropped:
+        out["dropped_lines"] = dropped
+        out["note"] = (
+            f"{dropped} line(s) were dropped to fit the context budget. Narrow "
+            "the query if you need them."
+        )
+    return out
 
 
 def _short(args) -> dict:
@@ -785,6 +893,7 @@ def _summarise(payload: dict) -> str:
 __all__ = [
     "CLAIM_SOURCES",
     "MAX_QUERY_ROWS",
+    "ROW_LIMITED_TOOLS",
     "MAX_TOOL_CHARS",
     "build_prompt",
     "MAX_LLM_CALLS",

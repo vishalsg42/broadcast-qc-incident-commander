@@ -31,7 +31,7 @@ from pydantic import BaseModel
 
 from pipeline.policy import available_profiles
 
-from .orchestrator import FIXTURES, Orchestrator, Status
+from .orchestrator import FIXTURES, Orchestrator, Status, TooManyRuns
 
 ROOT = Path(__file__).resolve().parent.parent
 MEDIA_DIR = ROOT / "media"
@@ -169,6 +169,10 @@ def start_run(body: StartRequest) -> dict:
         run = orchestrator.start(
             body.fixture, reasoner=body.reasoner, profile_id=body.profile_id
         )
+    except TooManyRuns as exc:
+        # 429, not 400: the request was fine, the service is busy. The UI can say
+        # "wait your turn" rather than "could not start run".
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"run_id": run.run_id, "fixture": run.fixture, "profile_id": run.profile_id}

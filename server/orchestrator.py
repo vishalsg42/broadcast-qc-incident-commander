@@ -53,6 +53,22 @@ from pipeline.stages import NORMALIZE, PACKAGE, PresetLibrary, run_pipeline
 # Generous for a demo, bounded for an instance that never restarts.
 MAX_RETAINED_RUNS = 25
 
+# Runs that may be in flight at once.
+#
+# The lever here is NOT Cloud Run's containerConcurrency: that counts HTTP
+# requests, and one page load is eighteen static assets over up to six parallel
+# connections, plus an SSE stream that holds a slot for as long as the run.
+# Lowering it would lock visitors out of loading the page at all. What needs
+# bounding is the WORK: one ffmpeg pass saturates both vCPUs, so two concurrent
+# runs already halve each other. This also caps the spend a public demo token
+# can cause, which the concurrency knob never could.
+MAX_ACTIVE_RUNS = 2
+
+
+class TooManyRuns(RuntimeError):
+    """A run was requested while the demo was already busy."""
+
+
 ROOT = Path(__file__).resolve().parent.parent
 PROFILE_PATH = ROOT / "pipeline" / "profiles" / "ebu_r128.yaml"
 
@@ -180,6 +196,13 @@ class Orchestrator:
             load_profile(profile_id)
         except KeyError as exc:
             raise ValueError(str(exc)) from exc
+        active = sum(1 for r in self._runs.values() if r.status in self.ACTIVE_STATUSES)
+        if active >= MAX_ACTIVE_RUNS:
+            raise TooManyRuns(
+                f"{active} run(s) already in progress. Each run holds ffmpeg for "
+                "about a minute, so they are queued rather than run at once. "
+                "Try again shortly."
+            )
         run = Run(run_id=f"ui-{uuid.uuid4().hex[:10]}", fixture=fixture, profile_id=profile_id)
         self._runs[run.run_id] = run
         self._evict_old_runs()

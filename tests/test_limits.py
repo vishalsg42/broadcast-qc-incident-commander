@@ -15,14 +15,24 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from agent.autonomous import (
+    MAX_QUERY_ROWS,
     MAX_TOOL_CHARS,
     AutonomousInvestigator,
     _failure_reason,
 )
 from agent.evidence import EvidenceLedger
 from pipeline.policy import load_profile
-from server.orchestrator import MAX_RETAINED_RUNS, Orchestrator, Run, Status
+from server.orchestrator import (
+    MAX_ACTIVE_RUNS,
+    MAX_RETAINED_RUNS,
+    Orchestrator,
+    Run,
+    Status,
+    TooManyRuns,
+)
 
 
 class _Tool:
@@ -124,15 +134,33 @@ class TestFailedToolCallsAreNotEvidence:
 
 
 class TestToolPayloadIsBounded:
-    def test_a_huge_result_is_truncated_and_says_so(self):
-        """Silently truncating is worse: the model would think it saw everything."""
+    def test_a_huge_line_based_result_drops_lines_and_stays_valid(self):
+        """Drop rows, do not slice the string.
+
+        Slicing handed the model a torn JSON document inside a JSON string, and
+        because Loki returns newest first it kept the boilerplate and deleted
+        the oldest entries - which is the evidence when the fault is at ingest.
+        """
         from agent.autonomous import _bounded
 
-        huge = {"rows": ["x" * 200 for _ in range(200)]}
+        text = "\n".join(f'{{"line": {i}, "pad": "{"x" * 200}"}}' for i in range(400))
+        huge = {"content": [{"type": "text", "text": text}], "isError": False}
+        out = _bounded(huge)
+
+        kept = out["content"][0]["text"].splitlines()
+        assert 0 < len(kept) < 400
+        assert out["dropped_lines"] == 400 - len(kept)
+        # Every kept line is still parseable, and the OLDEST survived.
+        assert json.loads(kept[0])["line"] == 0
+        assert json.loads(kept[-1])["line"] == len(kept) - 1
+
+    def test_a_result_with_nothing_line_shaped_says_so_rather_than_pretending(self):
+        from agent.autonomous import _bounded
+
+        huge = {"rows": ["x" * 200 for _ in range(500)]}
         out = _bounded(huge)
         assert out["truncated"] is True
-        assert "cut to" in out["note"]
-        assert len(json.dumps(out)) < len(json.dumps(huge))
+        assert "could not be trimmed" in out["note"]
 
     def test_a_small_result_passes_through_unchanged(self):
         from agent.autonomous import _bounded
@@ -257,3 +285,87 @@ class TestRunStoreIsBounded:
         # The newest survive; the oldest are gone.
         assert "r0" not in o._runs
         assert f"r{MAX_RETAINED_RUNS + 9}" in o._runs
+
+
+class TestQueryShapingMatchesTheRealSchemas:
+    """The clamp only touches tools that actually accept a limit.
+
+    The first version of this clamped every "query tool". The Loki discovery
+    tools declare additionalProperties: false and REJECT an unexpected `limit`;
+    the Tempo tools ignore it. Clamping by category would have broken the
+    model's own discovery calls.
+    """
+
+    def _shape(self, tool_name, args):
+        agent = AutonomousInvestigator(
+            ledger=EvidenceLedger(run_id="shape"),
+            pipeline_run=None,
+            profile=load_profile("ebu-r128-tv"),
+            allowlist={},
+        )
+        agent._before_tool(_Tool(tool_name), args, None)
+        return args
+
+    def test_loki_query_gets_a_clamped_limit(self):
+        args = self._shape("query_loki_logs", {"logql": "{x=`y`}", "limit": 5000})
+        assert args["limit"] == MAX_QUERY_ROWS
+
+    def test_loki_query_gets_the_compact_format(self):
+        """This is what actually shrinks the payload: 74KB against 186KB."""
+        args = self._shape("query_loki_logs", {"logql": "{x=`y`}"})
+        assert args["format"] == "compact"
+
+    def test_an_explicit_format_is_respected(self):
+        args = self._shape("query_loki_logs", {"logql": "{x=`y`}", "format": "raw"})
+        assert args["format"] == "raw"
+
+    def test_discovery_tools_are_never_given_a_limit(self):
+        """They reject unknown arguments outright."""
+        for name in ("list_loki_label_names", "list_loki_label_values"):
+            args = self._shape(name, {"datasourceUid": "loki"})
+            assert "limit" not in args, f"{name} would be sent an unknown argument"
+            assert "format" not in args
+
+    def test_tempo_tools_are_left_alone(self):
+        for name in ("tempo_traceql-search", "tempo_get-trace"):
+            args = self._shape(name, {"query": "{}"})
+            assert "limit" not in args
+
+    def test_a_nonsense_limit_does_not_raise(self):
+        """A tool that raises aborts the whole ADK invocation."""
+        args = self._shape("query_loki_logs", {"logql": "{x=`y`}", "limit": "lots"})
+        assert args["limit"] == MAX_QUERY_ROWS
+
+    def test_a_smaller_limit_is_left_alone(self):
+        args = self._shape("query_loki_logs", {"logql": "{x=`y`}", "limit": 5})
+        assert args["limit"] == 5
+
+
+class TestConcurrentRunsAreBounded:
+    """The work is bounded, not the HTTP concurrency.
+
+    One ffmpeg pass saturates both vCPUs, so two concurrent runs already halve
+    each other. Lowering Cloud Run's containerConcurrency instead would have
+    locked visitors out of loading the page, since one page load is eighteen
+    static assets and an SSE stream holds a slot for the length of the run.
+    """
+
+    def test_a_third_concurrent_run_is_refused(self, tmp_path):
+        o = Orchestrator(grafana_url="http://localhost:3000", out_dir=str(tmp_path))
+        for i in range(MAX_ACTIVE_RUNS):
+            run = Run(run_id=f"live{i}", fixture="fault")
+            run.status = Status.RUNNING
+            o._runs[run.run_id] = run
+        with pytest.raises(TooManyRuns, match="already in progress"):
+            o.start("clean")
+
+    def test_finished_runs_do_not_count_against_the_limit(self, tmp_path):
+        o = Orchestrator(grafana_url="http://localhost:3000", out_dir=str(tmp_path))
+        for i in range(20):
+            run = Run(run_id=f"done{i}", fixture="clean")
+            run.status = Status.DONE
+            o._runs[run.run_id] = run
+        # Does not raise. It will fail later for want of ffmpeg, not for capacity.
+        assert o._runs is not None
+        active = sum(1 for r in o._runs.values() if r.status in o.ACTIVE_STATUSES)
+        assert active == 0

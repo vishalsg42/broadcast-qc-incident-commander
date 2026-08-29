@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -235,6 +236,7 @@ class GrafanaClient:
         expected: int = 1,
         timeout_s: float | None = None,
         interval_s: float = 3.0,
+        on_progress: Callable[[float, float, int, int], None] | None = None,
     ) -> list[LogEntry]:
         """Poll until `expected` lines are queryable, or raise.
 
@@ -244,9 +246,14 @@ class GrafanaClient:
         Tempo in particular can lag well past half a minute.
         """
         timeout_s = timeout_s if timeout_s is not None else self.config.ingest_timeout_s
-        deadline = time.time() + timeout_s
+        started = time.time()
+        deadline = started + timeout_s
         while True:
             entries = self.query_logs(logql, limit=max(expected, 20))
+            if on_progress is not None:
+                # A multi-minute silent block reads as a hang. Report elapsed and
+                # found-so-far so a caller can show that something is happening.
+                on_progress(time.time() - started, timeout_s, len(entries), expected)
             if len(entries) >= expected:
                 return entries
             if time.time() >= deadline:

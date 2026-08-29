@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { BarRail } from "@/components/BarRail"
 import { EvidenceTable } from "@/components/EvidenceTable"
+import { IngestWait } from "@/components/IngestWait"
 import { LoudnessMeter } from "@/components/LoudnessMeter"
 import {
   AllowlistPanel,
@@ -149,6 +150,15 @@ export default function ControlRoom() {
             </div>
 
             <SignalPath stages={state.stages} />
+            {state.ingest && (
+              <IngestWait
+                backend={state.ingest.backend}
+                elapsed={state.ingest.elapsed}
+                timeout={state.ingest.timeout}
+                found={state.ingest.found}
+                expected={state.ingest.expected}
+              />
+            )}
             <EvidenceTable rows={state.evidence} />
             <ConclusionPanel conclusion={state.conclusion} />
             <ProposalPanel

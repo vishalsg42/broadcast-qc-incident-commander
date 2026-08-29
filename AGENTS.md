@@ -140,6 +140,15 @@ python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
   asset failed" is correlation. Either show the preset diff, or state the
   conclusion with calibrated confidence.
 
+## Recording the demo
+
+- **Do a throwaway run first to warm ingestion.** The first write to a new
+  Grafana Cloud Loki stream takes 90s+ because the stream must be created;
+  subsequent writes land in well under a second. Recording cold means minutes
+  of dead air.
+- The UI shows the wait rather than hiding it (`IngestWait`), so even a cold
+  run reads as a distributed system doing work rather than a hang.
+
 ## Traps already paid for
 
 - **`-movflags +faststart` on every output.** Without it the moov atom trails the

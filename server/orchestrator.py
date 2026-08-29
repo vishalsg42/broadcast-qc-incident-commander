@@ -177,10 +177,26 @@ class Orchestrator:
         inv = Investigator(client, ledger, run_id=pr.run_id, asset_id=pr.asset_id)
 
         run.emit("investigation_started", reasoner=reasoner_name)
+
+        # Grafana Cloud's OTLP gateway can take minutes to make a line
+        # queryable. Without progress the UI looks hung for the whole wait.
+        run.emit(
+            "awaiting_telemetry",
+            backend="Grafana Cloud" if client.config.is_cloud else "local Grafana",
+            timeout_s=client.config.ingest_timeout_s,
+        )
         client.wait_for_logs(
             f'{{service_name="qc-pipeline"}} | qc_run_id="{pr.run_id}"',
             expected=3,
+            on_progress=lambda elapsed, timeout, found, want: run.emit(
+                "telemetry_progress",
+                elapsed_s=round(elapsed, 1),
+                timeout_s=timeout,
+                found=found,
+                expected=want,
+            ),
         )
+        run.emit("telemetry_ready")
 
         baseline = inv.gather_baseline()
         self._interpret(run, reasoner, ledger, Phase.BASELINE, baseline)

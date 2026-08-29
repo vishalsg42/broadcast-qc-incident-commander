@@ -83,6 +83,20 @@ export interface WriteBackEvent {
   incident_detail: string
 }
 
+export interface TelemetryProgressEvent {
+  kind: "telemetry_progress"
+  elapsed_s: number
+  timeout_s: number
+  found: number
+  expected: number
+}
+
+export interface AwaitingTelemetryEvent {
+  kind: "awaiting_telemetry"
+  backend: string
+  timeout_s: number
+}
+
 export interface GenericEvent {
   kind:
     | "started"
@@ -91,6 +105,7 @@ export interface GenericEvent {
     | "escalated"
     | "rejected"
     | "repairing"
+    | "telemetry_ready"
     | "approval_timeout"
     | "error"
     | "end"
@@ -107,6 +122,8 @@ export type RunEvent =
   | ApprovalEvent
   | RepairedEvent
   | WriteBackEvent
+  | TelemetryProgressEvent
+  | AwaitingTelemetryEvent
   | GenericEvent
 
 export interface Profile {

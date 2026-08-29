@@ -3,6 +3,8 @@
 import { useCallback, useRef, useState } from "react"
 import type {
   ApprovalEvent,
+  AwaitingTelemetryEvent,
+  TelemetryProgressEvent,
   ConclusionEvent,
   EvidenceEvent,
   RefusalEvent,
@@ -28,6 +30,7 @@ export interface RunState {
   writeBack: WriteBackEvent | null
   escalation: string | null
   error: string | null
+  ingest: { backend: string; elapsed: number; timeout: number; found: number; expected: number } | null
 }
 
 const EMPTY: RunState = {
@@ -44,6 +47,7 @@ const EMPTY: RunState = {
   writeBack: null,
   escalation: null,
   error: null,
+  ingest: null,
 }
 
 /**
@@ -123,6 +127,24 @@ function reduce(s: RunState, e: RunEvent): RunState {
       return { ...s, repaired: e as RepairedEvent }
     case "written_back":
       return { ...s, writeBack: e as WriteBackEvent }
+    case "awaiting_telemetry": {
+      const e2 = e as AwaitingTelemetryEvent
+      return {
+        ...s,
+        ingest: { backend: e2.backend, elapsed: 0, timeout: e2.timeout_s, found: 0, expected: 3 },
+      }
+    }
+    case "telemetry_progress": {
+      const e2 = e as TelemetryProgressEvent
+      return {
+        ...s,
+        ingest: s.ingest
+          ? { ...s.ingest, elapsed: e2.elapsed_s, found: e2.found, expected: e2.expected }
+          : s.ingest,
+      }
+    }
+    case "telemetry_ready":
+      return { ...s, ingest: null }
     case "escalated":
       return { ...s, escalation: String((e as { reason?: string }).reason ?? "") }
     case "error":

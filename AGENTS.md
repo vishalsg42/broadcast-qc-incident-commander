@@ -156,6 +156,12 @@ python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
   aborted invocation rather than a retryable response. Return
   `{"ok": False, "error": ...}` — see `safe_record_interpretation`.
 - **`gcloud config configurations` does not isolate ADC.** Use `CLOUDSDK_CONFIG`.
+- **ADK 2.8 exposes the generated tool schema as `parameters_json_schema`**, not
+  the older `parameters` field, which is `None`. ADK also flags this as
+  EXPERIMENTAL (`JSON_SCHEMA_FOR_FUNC_DECL`), so re-run
+  `tests/test_adk_contract.py` after any ADK bump - it asserts the model-facing
+  surface is exactly `finding` + `supports`, which is the guarantee the whole
+  provenance design rests on.
 
 ## Hard constraints
 

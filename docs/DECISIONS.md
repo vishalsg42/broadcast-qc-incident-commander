@@ -376,3 +376,53 @@ degrading — the intended behaviour, observed rather than argued.
 
 A sharper ACTOR prompt would improve the on-screen narration. It would not
 change what the system concludes, which is the point.
+
+
+---
+
+## D22 — The Grafana Cloud cutover, and what it actually cost
+
+The earlier claim that moving from local to Cloud is "an env-var swap" was
+wrong three times over. Recording what it really took, because every one of
+these failed *silently* — an empty query result is indistinguishable from
+"that run does not exist."
+
+**1. Datasource UIDs are stack-specific, and there are several per type.**
+This stack ships three Loki datasources: `-logs`, `-alert-state-history`, and
+`-usage-insights`. Taking the first match queried usage-insights and returned
+nothing. `scripts/check_grafana.py` now prints every candidate and marks its
+choice.
+
+**2. `OTEL_EXPORTER_OTLP_HEADERS` must be quoted in `.env`.** The value
+contains a space, so an unquoted line is truncated by the shell at `Basic`.
+Grafana answers `401 no credentials provided`, which reads as a bad token
+rather than a quoting bug.
+
+**3. `GrafanaConfig(url=...)` silently drops the token and the UIDs.** Three
+entrypoints constructed it directly, and `demo.py` compounded it with a
+`--grafana` flag defaulting to localhost — so telemetry shipped to Cloud while
+queries went to the local stack. `from_env()` is now the only construction
+path, and its docstring says why.
+
+**Also:** Cloud ingestion routinely exceeds 90s, so `ingest_timeout_s` adapts —
+90s local, 300s Cloud.
+
+**And a false green of my own making.** The credential checker verified the
+OTLP header was *shaped* correctly and never that it *worked*. It now POSTs to
+the gateway. A check that cannot fail is not a check.
+
+---
+
+## D23 — Grafana IRM needed provisioning, not code
+
+`IncidentsService.QueryIncidentPreviews` returned 200 while `CreateIncident`
+returned 500 with a foreign-key violation on `Counters.orgID`. Plugin
+installed, token permitted, request well formed — Grafana's own IRM database
+simply had no counter row for the org, so incident IDs could not be allocated.
+
+Nothing on this side could repair server-side state. Opening **Incidents** once
+in the Grafana UI provisioned it, and incident creation has worked since.
+
+The lesson kept in code: a raw foreign-key error surfaced verbatim reads like
+our bug. `create_incident` now recognises that signature and says what is
+actually wrong and how to fix it.

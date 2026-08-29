@@ -35,7 +35,13 @@ from agent.grafana import GrafanaClient, GrafanaConfig
 from agent.investigator import Investigator
 from agent.reasoner import GeminiReasoner, Reasoner, ScriptedReasoner
 from pipeline import telemetry
-from pipeline.policy import BLOCKED, Profile, evaluate
+from pipeline.policy import (
+    BLOCKED,
+    UNMEASURABLE,
+    Profile,
+    evaluate,
+    load_profile,
+)
 from pipeline.remediation import execute_repair
 from pipeline.stages import NORMALIZE, PACKAGE, PresetLibrary, run_pipeline
 
@@ -62,6 +68,7 @@ class Status(StrEnum):
 class Run:
     run_id: str
     fixture: str
+    profile_id: str = "ebu-r128-tv"
     status: Status = Status.PENDING
     events: queue.Queue = field(default_factory=queue.Queue)
     proposal: dict | None = None
@@ -88,10 +95,17 @@ class Orchestrator:
     def get(self, run_id: str) -> Run | None:
         return self._runs.get(run_id)
 
-    def start(self, fixture: str, *, reasoner: str = "scripted") -> Run:
+    def start(
+        self, fixture: str, *, reasoner: str = "scripted", profile_id: str | None = None
+    ) -> Run:
         if fixture not in FIXTURES:
             raise ValueError(f"unknown fixture {fixture!r}")
-        run = Run(run_id=f"ui-{uuid.uuid4().hex[:10]}", fixture=fixture)
+        profile_id = profile_id or self.profile.id
+        try:
+            load_profile(profile_id)
+        except KeyError as exc:
+            raise ValueError(str(exc)) from exc
+        run = Run(run_id=f"ui-{uuid.uuid4().hex[:10]}", fixture=fixture, profile_id=profile_id)
         self._runs[run.run_id] = run
         threading.Thread(target=self._execute, args=(run, reasoner), daemon=True).start()
         return run
@@ -118,8 +132,19 @@ class Orchestrator:
 
     def _run_inner(self, run: Run, reasoner_name: str) -> None:
         media, fault = FIXTURES[run.fixture]
+        # The profile is per-run, so one asset can be adjudicated against
+        # different delivery specs - including one this probe cannot measure.
+        profile = load_profile(run.profile_id)
+        allowlist = allowlist_from_profile(profile.raw)
         run.status = Status.RUNNING
-        run.emit("started", fixture=run.fixture, media=media)
+        run.emit(
+            "started",
+            fixture=run.fixture,
+            media=media,
+            profile_id=profile.id,
+            profile_name=profile.name,
+            measurable=profile.is_measurable,
+        )
 
         # 1. pipeline
         #
@@ -140,15 +165,15 @@ class Orchestrator:
                 ROOT / "media" / media,
                 out_dir=self.out_dir,
                 overrides={PACKAGE: fault} if fault else None,
-                black_opts=self.profile.black_detector_opts,
-                profile=self.profile,
+                black_opts=profile.black_detector_opts,
+                profile=profile,
             )
         finally:
             telemetry.shutdown()
 
         run.pipeline_run_id = pr.run_id
         for stage in pr.stages:
-            verdict = evaluate(self.profile, stage.qc)
+            verdict = evaluate(profile, stage.qc)
             run.emit(
                 "stage",
                 stage=stage.stage,
@@ -158,8 +183,8 @@ class Orchestrator:
                 verdict=verdict.status,
             )
 
-        delivered = evaluate(self.profile, pr.stages[-1].qc)
-        target, tolerance = self.profile.loudness_target
+        delivered = evaluate(profile, pr.stages[-1].qc)
+        target, tolerance = profile.loudness_target
         run.emit(
             "verdict",
             status=delivered.status,
@@ -175,6 +200,19 @@ class Orchestrator:
                 for c in delivered.checks
             ],
         )
+
+        if delivered.status == UNMEASURABLE:
+            # Declining is the correct answer, not a failure. There is nothing
+            # to investigate because no verdict was reached.
+            run.emit(
+                "unmeasurable",
+                profile_id=profile.id,
+                profile_name=profile.name,
+                requires=profile.required_measurement,
+                reason=delivered.checks[0].message if delivered.checks else "",
+            )
+            run.status = Status.DONE
+            return
 
         if delivered.status != BLOCKED:
             run.status = Status.DONE
@@ -246,7 +284,7 @@ class Orchestrator:
 
         # 3. the refusal - deterministic, through the production validator
         for candidate in adversarial_candidates(ledger):
-            result = screen_candidate(candidate, ledger, self.allowlist)
+            result = screen_candidate(candidate, ledger, allowlist)
             run.emit(
                 "refusal",
                 name=candidate.name,
@@ -265,9 +303,9 @@ class Orchestrator:
             preset_changed_at=changed_at,
             recently_changed=recently_changed,
             cause_detail=cause_detail,
-            delivery_profile_id=self.profile.id,
+            delivery_profile_id=profile.id,
         )
-        validation = validate_conclusion(conclusion, ledger, allowlist=self.allowlist)
+        validation = validate_conclusion(conclusion, ledger, allowlist=allowlist)
         run.emit(
             "conclusion",
             accepted=validation.ok,
@@ -300,7 +338,7 @@ class Orchestrator:
             "action_id": action.action_id,
             "params": action.params,
             "rationale": action.rationale,
-            "allowlist": sorted(self.allowlist),
+            "allowlist": sorted(allowlist),
         }
         run.status = Status.AWAITING_APPROVAL
         run.emit("awaiting_approval", **run.proposal)
@@ -321,7 +359,7 @@ class Orchestrator:
             action.action_id,
             action.params,
             source_path=pr.stage(NORMALIZE).output_path,
-            profile=self.profile,
+            profile=profile,
             out_dir=self.out_dir,
             allowlist=self.allowlist,
         )

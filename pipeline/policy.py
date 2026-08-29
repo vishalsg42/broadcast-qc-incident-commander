@@ -178,6 +178,28 @@ class Profile:
         return out
 
 
+PROFILE_DIR = Path(__file__).parent / "profiles"
+
+
+def available_profiles() -> list[Profile]:
+    """Every delivery profile shipped, ordered so measurable ones come first.
+
+    The unmeasurable one is not a broken entry to hide - it is the point. A
+    system that declines to adjudicate what it cannot measure is worth more than
+    one that always answers.
+    """
+    profiles = [Profile.load(p) for p in sorted(PROFILE_DIR.glob("*.yaml"))]
+    return sorted(profiles, key=lambda p: (not p.is_measurable, p.id))
+
+
+def load_profile(profile_id: str) -> Profile:
+    for profile in available_profiles():
+        if profile.id == profile_id:
+            return profile
+    known = ", ".join(p.id for p in available_profiles())
+    raise KeyError(f"unknown profile {profile_id!r}; known: {known}")
+
+
 def _subtract_regions(
     interval: BlackInterval, regions: list[dict]
 ) -> list[tuple[float, float]]:

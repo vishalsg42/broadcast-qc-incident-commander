@@ -12,8 +12,9 @@ import {
   ConclusionPanel,
   ProposalPanel,
   SignalPath,
+  UnmeasurablePanel,
 } from "@/components/Panels"
-import type { Profile } from "@/lib/types"
+import type { ProfileList } from "@/lib/types"
 import { useRun } from "@/lib/useRun"
 
 const FIXTURES = [
@@ -26,11 +27,18 @@ export default function ControlRoom() {
   const { state, start, approve } = useRun()
   const [fixture, setFixture] = useState("fault")
   const [reasoner, setReasoner] = useState("scripted")
+  const [profileId, setProfileId] = useState<string | null>(null)
 
-  const { data: profile } = useQuery<Profile>({
+  const { data: profiles } = useQuery<ProfileList>({
     queryKey: ["profile"],
     queryFn: async () => (await fetch("/api/profile")).json(),
   })
+
+  // Before the list arrives there is nothing to select; afterwards the server
+  // names the default rather than the UI guessing one.
+  const selectedId = profileId ?? profiles?.default ?? null
+  const profile =
+    profiles?.profiles.find((p) => p.id === selectedId) ?? profiles?.profiles[0] ?? null
 
   const completed = useMemo(() => {
     const done = new Set<string>()
@@ -41,6 +49,7 @@ export default function ControlRoom() {
 
   const delivered = state.stages.at(-1) ?? null
   const blocked = state.verdict?.status === "BLOCKED"
+  const withheld = state.unmeasurable !== null
 
   return (
     <div className="flex h-dvh overflow-hidden bg-ink">
@@ -55,12 +64,26 @@ export default function ControlRoom() {
             </h1>
             <p className="legend mt-0.5">
               {profile
-                ? `${profile.id} v${profile.version} · ${profile.target_lufs} ±${profile.tolerance_lu} LU`
+                ? `${profile.standard} · ${profile.target_lufs} ±${profile.tolerance_lu} LU` +
+                  (profile.measurable ? "" : " · not measurable here")
                 : "loading delivery profile"}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
+            <select
+              value={selectedId ?? ""}
+              onChange={(e) => setProfileId(e.target.value)}
+              disabled={state.running || !profiles}
+              className="legend border border-rule bg-panel px-3 py-2 text-read"
+              aria-label="Delivery profile"
+            >
+              {(profiles?.profiles ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
             <select
               value={fixture}
               onChange={(e) => setFixture(e.target.value)}
@@ -85,8 +108,8 @@ export default function ControlRoom() {
               <option value="gemini">Gemini</option>
             </select>
             <button
-              onClick={() => start(fixture, reasoner)}
-              disabled={state.running}
+              onClick={() => selectedId && start(fixture, reasoner, selectedId)}
+              disabled={state.running || !selectedId}
               className="legend cursor-pointer bg-bright px-4 py-2 text-ink transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {state.running ? "Running" : "Run delivery"}
@@ -118,7 +141,9 @@ export default function ControlRoom() {
                   style={{
                     background: blocked
                       ? "color-mix(in srgb, var(--color-blocked) 16%, transparent)"
-                      : undefined,
+                      : withheld
+                        ? "color-mix(in srgb, var(--color-pending) 16%, transparent)"
+                        : undefined,
                   }}
                 >
                   <span
@@ -126,12 +151,20 @@ export default function ControlRoom() {
                     style={{
                       color: blocked
                         ? "var(--color-blocked)"
-                        : state.verdict
-                          ? "var(--color-inspec)"
-                          : "var(--color-legend)",
+                        : withheld
+                          ? "var(--color-pending)"
+                          : state.verdict
+                            ? "var(--color-inspec)"
+                            : "var(--color-legend)",
                     }}
                   >
-                    {state.verdict ? (blocked ? "Blocked" : "Cleared") : "Awaiting run"}
+                    {withheld
+                      ? "Not judged"
+                      : state.verdict
+                        ? blocked
+                          ? "Blocked"
+                          : "Cleared"
+                        : "Awaiting run"}
                   </span>
                   <span className="meter text-[0.6875rem] text-legend">
                     {state.runId ?? "—"}
@@ -159,6 +192,7 @@ export default function ControlRoom() {
                 expected={state.ingest.expected}
               />
             )}
+            <UnmeasurablePanel event={state.unmeasurable} />
             <EvidenceTable rows={state.evidence} />
             <ConclusionPanel conclusion={state.conclusion} />
             <ProposalPanel

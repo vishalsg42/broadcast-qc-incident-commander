@@ -1,6 +1,11 @@
 /** Event shapes emitted by the orchestrator over SSE. */
 
-export type Verdict = "PASS" | "BLOCKED" | "UNKNOWN"
+/**
+ * UNMEASURABLE is not a failure mode. It is the verdict for a profile whose
+ * required measurement this probe cannot produce - answering "I cannot judge
+ * this" instead of a confident wrong verdict.
+ */
+export type Verdict = "PASS" | "BLOCKED" | "UNKNOWN" | "UNMEASURABLE"
 
 export interface StageEvent {
   kind: "stage"
@@ -124,16 +129,35 @@ export type RunEvent =
   | WriteBackEvent
   | TelemetryProgressEvent
   | AwaitingTelemetryEvent
+  | UnmeasurableEvent
   | GenericEvent
 
 export interface Profile {
   id: string
+  name: string
+  standard: string
   version: number
   target_lufs: number
   tolerance_lu: number
   true_peak_ceiling: number | null
   max_contiguous_body_black_s: number
+  /** False when the profile requires a measurement this probe cannot make. */
+  measurable: boolean
+  requires: string
   allowlist: string[]
+}
+
+export interface ProfileList {
+  default: string
+  profiles: Profile[]
+}
+
+export interface UnmeasurableEvent {
+  kind: "unmeasurable"
+  profile_id: string
+  profile_name: string
+  requires: string
+  reason: string
 }
 
 /** The asset's seven steps - the same count as SMPTE 75% colour bars. */

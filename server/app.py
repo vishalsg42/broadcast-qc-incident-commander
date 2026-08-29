@@ -29,6 +29,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from pipeline.policy import available_profiles
+
 from .orchestrator import FIXTURES, Orchestrator, Status
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -91,6 +93,7 @@ def require_token(
 class StartRequest(BaseModel):
     fixture: str = "fault"
     reasoner: str = "scripted"
+    profile_id: str | None = None
 
 
 class ApprovalRequest(BaseModel):
@@ -126,28 +129,46 @@ def warm_up() -> None:
     threading.Thread(target=_warm, daemon=True).start()
 
 
-@app.get("/api/profile")
-def profile() -> dict:
-    """The delivery spec being applied, so the UI can show what is being enforced."""
-    target, tolerance = orchestrator.profile.loudness_target
+def _profile_payload(profile) -> dict:
+    target, tolerance = profile.loudness_target
     return {
-        "id": orchestrator.profile.id,
-        "version": orchestrator.profile.version,
+        "id": profile.id,
+        "name": profile.name,
+        "standard": profile.standard,
+        "version": profile.version,
         "target_lufs": target,
         "tolerance_lu": tolerance,
-        "true_peak_ceiling": orchestrator.profile.true_peak_ceiling,
-        "max_contiguous_body_black_s": orchestrator.profile.max_contiguous_body_black,
-        "allowlist": sorted(orchestrator.allowlist),
+        "true_peak_ceiling": profile.true_peak_ceiling,
+        "max_contiguous_body_black_s": profile.max_contiguous_body_black,
+        # A profile that demands a measurement this probe cannot make is
+        # adjudicable by nobody here. Saying so is the point, not an omission.
+        "measurable": profile.is_measurable,
+        "requires": profile.required_measurement,
+        # The allowlist is a list of action objects; the UI only needs the names
+        # of the actions the agent is permitted to propose under this profile.
+        "allowlist": sorted(a["id"] for a in profile.remediation_allowlist),
+    }
+
+
+@app.get("/api/profile")
+def profile() -> dict:
+    """Every delivery spec on offer, so the operator picks what is enforced."""
+    profiles = available_profiles()
+    return {
+        "default": orchestrator.profile.id,
+        "profiles": [_profile_payload(p) for p in profiles],
     }
 
 
 @app.post("/api/runs", dependencies=[Depends(require_token)])
 def start_run(body: StartRequest) -> dict:
     try:
-        run = orchestrator.start(body.fixture, reasoner=body.reasoner)
+        run = orchestrator.start(
+            body.fixture, reasoner=body.reasoner, profile_id=body.profile_id
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"run_id": run.run_id, "fixture": run.fixture}
+    return {"run_id": run.run_id, "fixture": run.fixture, "profile_id": run.profile_id}
 
 
 @app.get("/api/runs/{run_id}/events")
@@ -198,6 +219,7 @@ def get_run(run_id: str) -> dict:
     return {
         "run_id": run.run_id,
         "fixture": run.fixture,
+        "profile_id": run.profile_id,
         "status": str(run.status),
         "pipeline_run_id": run.pipeline_run_id,
         "proposal": run.proposal,

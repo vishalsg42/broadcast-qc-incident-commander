@@ -127,6 +127,24 @@ Which is why a deterministic profile engine beats a model eyeballing frames.
 - **Netflix's ≈ −27 LKFS is dialogue-gated** — a different measurement that
   `ebur128` does not report. It needs its own profile, not a changed number.
 
+### The system declines to answer
+
+Pick **Netflix — dialogue-gated** in the profile selector and run the same
+asset. The gate returns **UNMEASURABLE**, not a verdict:
+
+> `netflix-dialog-gated` requires `bs1770_dialog_gated`; this probe produces
+> `bs1770_gated`. Requires the dialogue anchor.
+
+Nothing is investigated and no repair is proposed — a defect cannot be
+attributed against a specification the pipeline is not equipped to measure. The
+profile's remediation allowlist collapses to `escalate_to_human` alone.
+
+Comparing a dialogue-gated target against a programme-gated measurement compares
+two different quantities. It would produce a confident number that is wrong by
+an unknown amount, which in a delivery pipeline is worse than no number at all.
+The same asset returns BLOCKED under R128 and A/85, and UNMEASURABLE under
+Netflix, from one measurement.
+
 Real rejection causes, in rough order of frequency: audio track layout and
 channel mapping, caption conformance, metadata, timecode discontinuity, wrapper
 conformance (AS-11 DPP, IMF), illegal video levels, PSE/Harding. Loudness is

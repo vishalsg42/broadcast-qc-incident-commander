@@ -11,6 +11,7 @@ import type {
   RepairedEvent,
   RunEvent,
   StageEvent,
+  UnmeasurableEvent,
   TraceEvent,
   VerdictEvent,
   WriteBackEvent,
@@ -29,6 +30,7 @@ export interface RunState {
   repaired: RepairedEvent | null
   writeBack: WriteBackEvent | null
   escalation: string | null
+  unmeasurable: UnmeasurableEvent | null
   error: string | null
   ingest: { backend: string; elapsed: number; timeout: number; found: number; expected: number } | null
 }
@@ -46,8 +48,23 @@ const EMPTY: RunState = {
   repaired: null,
   writeBack: null,
   escalation: null,
+  unmeasurable: null,
   error: null,
   ingest: null,
+}
+
+/**
+ * The hosted demo gates anything that starts work behind a token, so the link
+ * judges are given carries `?token=...`. Read it back out of the address bar and
+ * attach it to every request that starts or approves work - without this the Run
+ * button posts unauthenticated and fails with a 403 that looks like a dead page.
+ * Locally DEMO_TOKEN is unset, there is no token in the URL, and this is a no-op.
+ */
+function withToken(path: string): string {
+  if (typeof window === "undefined") return path
+  const token = new URLSearchParams(window.location.search).get("token")
+  if (!token) return path
+  return `${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
 }
 
 /**
@@ -62,17 +79,24 @@ export function useRun() {
   const [state, setState] = useState<RunState>(EMPTY)
   const sourceRef = useRef<EventSource | null>(null)
 
-  const start = useCallback(async (fixture: string, reasoner: string) => {
+  const start = useCallback(
+    async (fixture: string, reasoner: string, profileId: string) => {
     sourceRef.current?.close()
     setState({ ...EMPTY, running: true })
 
-    const res = await fetch("/api/runs", {
+    const res = await fetch(withToken("/api/runs"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fixture, reasoner }),
+      body: JSON.stringify({ fixture, reasoner, profile_id: profileId }),
     })
     if (!res.ok) {
-      setState((s) => ({ ...s, running: false, error: `Could not start run (${res.status})` }))
+      // 403 means the page was opened without the demo token. Saying so beats a
+      // bare status code, because the fix is a different link.
+      const detail =
+        res.status === 403
+          ? "This demo link is missing its access token, so runs cannot be started."
+          : `Could not start run (${res.status})`
+      setState((s) => ({ ...s, running: false, error: detail }))
       return
     }
     const { run_id } = (await res.json()) as { run_id: string }
@@ -90,11 +114,13 @@ export function useRun() {
       source.close()
       setState((s) => (s.running ? { ...s, running: false, error: "Stream disconnected" } : s))
     }
-  }, [])
+    },
+    [],
+  )
 
   const approve = useCallback(
     async (runId: string, approved: boolean) => {
-      await fetch(`/api/runs/${runId}/approval`, {
+      await fetch(withToken(`/api/runs/${runId}/approval`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approved }),
@@ -145,6 +171,8 @@ function reduce(s: RunState, e: RunEvent): RunState {
     }
     case "telemetry_ready":
       return { ...s, ingest: null }
+    case "unmeasurable":
+      return { ...s, unmeasurable: e as UnmeasurableEvent }
     case "escalated":
       return { ...s, escalation: String((e as { reason?: string }).reason ?? "") }
     case "error":

@@ -7,6 +7,7 @@ import type {
   RepairedEvent,
   StageEvent,
   TraceEvent,
+  UnmeasurableEvent,
   WriteBackEvent,
 } from "@/lib/types"
 
@@ -248,4 +249,44 @@ export function ProposalPanel({
   }
 
   return null
+}
+
+/**
+ * The refusal to adjudicate.
+ *
+ * Amber rather than red on purpose: this is not a failed asset. The asset was
+ * never judged, because the profile demands a measurement this probe cannot
+ * make. Reporting that plainly is the alternative to a confident wrong verdict.
+ */
+export function UnmeasurablePanel({ event }: { event: UnmeasurableEvent | null }) {
+  if (!event) return null
+  return (
+    <div
+      className="panel enter border-l-2 p-4"
+      style={{ borderLeftColor: "var(--color-pending)" }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="legend">Verdict withheld</span>
+        <span
+          className="text-sm font-bold tracking-[0.1em] uppercase"
+          style={{ color: "var(--color-pending)" }}
+        >
+          Unmeasurable
+        </span>
+      </div>
+      <p className="mt-3 text-[0.8125rem] leading-relaxed text-read">
+        {event.reason}
+      </p>
+      <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+        <dt className="legend">Profile</dt>
+        <dd className="meter text-[0.75rem] text-read">{event.profile_name}</dd>
+        <dt className="legend">Requires</dt>
+        <dd className="meter text-[0.75rem] text-read">{event.requires}</dd>
+      </dl>
+      <p className="legend mt-3 leading-relaxed">
+        No repair is proposed. A defect cannot be attributed against a
+        specification this pipeline is not equipped to measure.
+      </p>
+    </div>
+  )
 }

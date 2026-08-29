@@ -467,3 +467,30 @@ now refuses to start the run and names the variable.
 Verified in production: real Gemini via Vertex AI, real Grafana Cloud, real
 ffmpeg. Telemetry queryable in **1.0s** thanks to the boot warm-up, four
 refusals, approval, repair, re-validation, annotation and IRM incident.
+
+## D25 — The refusal had to be reachable, not merely implemented
+
+`policy.py` could always answer `UNMEASURABLE`, and `tests/test_profiles.py`
+proved it. But `PROFILE_PATH` was hardcoded to `ebu_r128.yaml`, `StartRequest`
+had no `profile_id`, and the UI never asked. **The best idea in the project was
+unreachable from the product** — an answer no caller can obtain is
+indistinguishable from one that does not exist.
+
+The profile is now selected per run: a registry in `policy.py`, `profile_id` on
+`POST /api/runs`, all three profiles listed by `GET /api/profile`, and a
+selector in the control room. One asset, one measurement, three correct and
+different answers — BLOCKED under R128, BLOCKED under A/85, UNMEASURABLE under
+Netflix.
+
+The refusal terminates the run deliberately. There is no investigation and no
+proposed repair, because attributing a defect presupposes a verdict that was
+never reached. Netflix's allowlist contains `escalate_to_human` and nothing
+else, so the data says the same thing the code does.
+
+**A submission-blocking bug fell out of this.** The deployed UI could not start
+a run at all: `DEMO_TOKEN` is set in production, `require_token` reads a `token`
+query parameter, and `useRun` posted without one — every click of Run delivery
+returned 403 and the page looked dead. It went unnoticed because every previous
+production run was driven from a script, never from the hosted page. The hook
+now forwards the token from the address bar, and a 403 says the link is missing
+its token rather than showing a bare status code.

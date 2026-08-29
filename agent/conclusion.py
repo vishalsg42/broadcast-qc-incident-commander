@@ -64,6 +64,7 @@ def build_conclusion(
     changed_by: str | None = None,
     change_ticket: str | None = None,
     approved_by: str | None = None,
+    experiment: dict | None = None,
     confidence: str = "high",
 ) -> Conclusion:
     """Assemble claims from what the phases established.
@@ -75,6 +76,7 @@ def build_conclusion(
     divergence = _step_id(ledger, Phase.DIVERGENCE)
     actor = _step_id(ledger, Phase.ACTOR)
     cause = _step_id(ledger, Phase.CAUSE)
+    trial = _step_id(ledger, Phase.EXPERIMENT)
 
     claims: list[Claim] = []
 
@@ -194,6 +196,47 @@ def build_conclusion(
                 )
             )
 
+    # The experiment, if one ran. Deliberately its own claim rather than folded
+    # into the root cause: reproducing a defect is EVIDENCE FOR a cause, not the
+    # same statement as one, and the two have different confidence.
+    if experiment and trial:
+        delta = experiment["delta_lu"]
+        direction = "raised" if delta >= 0 else "lowered"
+        if experiment["reproduces_defect"]:
+            value = (
+                f"Re-running {experiment['stage']} on the same input with "
+                f"{experiment['control_preset_id']} produced "
+                f"{experiment['control_lufs']} LUFS ({experiment['control_verdict']}), "
+                f"and with {experiment['suspect_preset_id']} "
+                f"{experiment['suspect_lufs']} LUFS "
+                f"({experiment['suspect_verdict']}) - the suspect preset "
+                f"{direction} loudness by {abs(delta)} LU on this content and "
+                "reproduced the defect"
+            )
+            # High: this is a measurement of what happened, not an inference.
+            claims.append(
+                Claim(
+                    claim_type=ClaimType.EXPERIMENT,
+                    claim_value=value[:500],
+                    supporting_step_ids=[s for s in [trial] if s],
+                    confidence="high",
+                )
+            )
+        else:
+            claims.append(
+                Claim(
+                    claim_type=ClaimType.EXPERIMENT,
+                    claim_value=(
+                        f"Re-running {experiment['stage']} with "
+                        f"{experiment['control_preset_id']} did NOT clear the "
+                        "profile, so the preset is not sufficient to explain "
+                        "this failure on its own"
+                    )[:500],
+                    supporting_step_ids=[s for s in [trial] if s],
+                    confidence="high",
+                )
+            )
+
     if cause_detail:
         claims.append(
             Claim(
@@ -202,7 +245,7 @@ def build_conclusion(
                 # is correlation; the causal weight comes from what the preset
                 # DOES, which is why cause_detail describes the filter itself.
                 claim_value=f"Most likely introducing configuration: {cause_detail}",
-                supporting_step_ids=[s for s in [actor, cause] if s],
+                supporting_step_ids=[s for s in [actor, cause, trial] if s],
                 confidence=confidence,
             )
         )

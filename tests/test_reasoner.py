@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent.evidence import EvidenceLedger, LedgerError, Phase
+from agent.evidence import PHASE_ORDER, EvidenceLedger, LedgerError, Phase
 from agent.reasoner import (
     PHASE_QUESTIONS,
     ReasoningError,
@@ -79,7 +79,7 @@ class TestSupportsSemantics:
 class TestPromptSurface:
     def test_every_phase_has_a_fixed_question(self):
         """Questions are controller-authored, never model-authored."""
-        assert set(PHASE_QUESTIONS) == set(Phase)
+        assert set(PHASE_QUESTIONS) == set(PHASE_ORDER)
         assert all(q.endswith("?") for q in PHASE_QUESTIONS.values())
 
 
@@ -96,8 +96,8 @@ class TestFullLoopOffline:
             reasoner.interpret(ledger, phase, summary)
 
         assert len(ledger.steps) == 4
-        assert all(ledger.phase_complete(p) for p in Phase)
-        assert [s.phase for s in ledger.steps] == list(Phase)
+        assert all(ledger.phase_complete(p) for p in PHASE_ORDER)
+        assert [s.phase for s in ledger.steps] == PHASE_ORDER
 
     def test_second_interpretation_without_a_new_query_is_refused(self, ledger):
         ledger.observe(Phase.BASELINE, "q", {})

@@ -32,12 +32,24 @@ from pydantic import BaseModel, Field, ValidationError
 
 
 class Phase(StrEnum):
+    """Where an observation came from.
+
+    The first four are the fixed investigation sequence. EXPERIMENT is not part
+    of that sequence: it is an observation the controller makes by ACTING on the
+    asset rather than by querying telemetry, and it only happens when there is a
+    suspect worth testing.
+    """
+
     BASELINE = "BASELINE"
     DIVERGENCE = "DIVERGENCE"
     ACTOR = "ACTOR"
     CAUSE = "CAUSE"
+    EXPERIMENT = "EXPERIMENT"
 
 
+# The four retrieval phases, in order. Not every Phase member belongs here -
+# iterate this when you mean "the investigation sequence", and the enum only
+# when you mean "any source an observation can have".
 PHASE_ORDER = [Phase.BASELINE, Phase.DIVERGENCE, Phase.ACTOR, Phase.CAUSE]
 
 
@@ -48,6 +60,10 @@ class ClaimType(StrEnum):
     ACTOR_PRESET = "ACTOR_PRESET"
     ROOT_CAUSE = "ROOT_CAUSE"
     NO_FAULT = "NO_FAULT"
+    # A result the controller obtained by running an experiment, not by reading
+    # telemetry. Kept distinct from ROOT_CAUSE because reproducing a defect is
+    # evidence for a cause, not the same statement as one.
+    EXPERIMENT = "EXPERIMENT"
 
 
 Confidence = Literal["high", "medium", "low"]

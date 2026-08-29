@@ -7,6 +7,7 @@ import type {
   TelemetryProgressEvent,
   ConclusionEvent,
   EvidenceEvent,
+  ExperimentEvent,
   RefusalEvent,
   RepairedEvent,
   RunEvent,
@@ -34,6 +35,9 @@ export interface RunState {
   activeStage: string | null
   /** Investigation phase the model is currently interpreting. */
   activePhase: string | null
+  /** Set while the controller is re-running the stage to test the suspect. */
+  experimentRunning: boolean
+  experiment: ExperimentEvent | null
   unmeasurable: UnmeasurableEvent | null
   error: string | null
   ingest: { backend: string; elapsed: number; timeout: number; found: number; expected: number } | null
@@ -54,6 +58,8 @@ const EMPTY: RunState = {
   escalation: null,
   activeStage: null,
   activePhase: null,
+  experimentRunning: false,
+  experiment: null,
   unmeasurable: null,
   error: null,
   ingest: null,
@@ -147,6 +153,13 @@ function reduce(s: RunState, e: RunEvent): RunState {
       // The stage that just finished is no longer in progress. Cleared here
       // rather than on the next start, so the gap between stages reads as done.
       return { ...s, stages: [...s.stages, e as StageEvent], activeStage: null }
+    case "experiment_started":
+      return { ...s, experimentRunning: true }
+    case "experiment":
+      return { ...s, experimentRunning: false, experiment: e as ExperimentEvent }
+    case "experiment_failed":
+      // Corroboration failing must not read as the investigation failing.
+      return { ...s, experimentRunning: false }
     case "phase_started":
       return { ...s, activePhase: String((e as { phase?: string }).phase ?? "") }
     case "verdict":
@@ -190,7 +203,13 @@ function reduce(s: RunState, e: RunEvent): RunState {
     case "error":
       return { ...s, error: String((e as { message?: string }).message ?? "Run failed") }
     case "end":
-      return { ...s, running: false, activeStage: null, activePhase: null }
+      return {
+        ...s,
+        running: false,
+        activeStage: null,
+        activePhase: null,
+        experimentRunning: false,
+      }
     default:
       return s
   }

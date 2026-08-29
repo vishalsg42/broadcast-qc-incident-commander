@@ -14,13 +14,13 @@ ran.
 from __future__ import annotations
 
 from agent.conclusion import build_conclusion
-from agent.evidence import ClaimType, EvidenceLedger, Phase
+from agent.evidence import PHASE_ORDER, ClaimType, EvidenceLedger, Phase
 from pipeline.stages import PACKAGE, PresetLibrary
 
 
 def _ledger() -> EvidenceLedger:
     ledger = EvidenceLedger(run_id="prov-test")
-    for phase in Phase:
+    for phase in PHASE_ORDER:
         ledger.observe(phase, f"query for {phase.value}", {"data": phase.value})
         ledger.record_interpretation(finding=f"{phase.value} finding", supports=True)
     return ledger

@@ -15,7 +15,12 @@ import pytest
 from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool
 
-from agent.evidence import EvidenceLedger, Phase, safe_record_interpretation
+from agent.evidence import (
+    PHASE_ORDER,
+    EvidenceLedger,
+    Phase,
+    safe_record_interpretation,
+)
 from agent.reasoner import DEFAULT_MODEL, PHASE_QUESTIONS, SYSTEM_INSTRUCTION
 
 
@@ -87,7 +92,7 @@ class TestAgentConstruction:
         assert "Ruling something OUT" in SYSTEM_INSTRUCTION
 
     def test_every_phase_question_is_controller_authored(self):
-        assert set(PHASE_QUESTIONS) == set(Phase)
+        assert set(PHASE_QUESTIONS) == set(PHASE_ORDER)
 
 
 class TestToolBehaviour:

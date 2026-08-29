@@ -5,6 +5,7 @@ import { STAGE_PLAIN } from "@/lib/types"
 import type {
   ApprovalEvent,
   ConclusionEvent,
+  ExperimentEvent,
   RefusalEvent,
   RepairedEvent,
   StageEvent,
@@ -362,6 +363,126 @@ export function UnmeasurablePanel({ event }: { event: UnmeasurableEvent | null }
         Nothing is repaired. You cannot fix a file against a rule you cannot
         measure, so the system stops rather than guessing.
       </p>
+    </div>
+  )
+}
+
+/**
+ * The experiment.
+ *
+ * Everything else on this screen is retrieval - the system reading what already
+ * happened. This is the one place it ACTS: it re-runs the failing stage on the
+ * same input with the preset that normally runs, and measures both. A control
+ * that passes where the suspect blocks rules out the input and reproduces the
+ * defect on demand.
+ *
+ * The delta is stated as what happened to THIS asset. It is a property of the
+ * content, not of the preset - identical channels sum to +6 dB, decorrelated
+ * stereo to about +3 - so the caveat is shown, not buried.
+ */
+export function ExperimentPanel({
+  running,
+  experiment,
+}: {
+  running: boolean
+  experiment: ExperimentEvent | null
+}) {
+  if (!running && !experiment) return null
+
+  if (running || !experiment) {
+    return (
+      <div className="panel px-4 py-3">
+        <span className="legend">Testing the suspected cause</span>
+        <p className="working mt-1 text-[0.8125rem] text-bright">
+          re-running the stage with the previous setting to compare
+        </p>
+      </div>
+    )
+  }
+
+  const arms = [
+    {
+      label: "Normal setting",
+      id: experiment.control_preset_id,
+      version: experiment.control_preset_version,
+      lufs: experiment.control_lufs,
+      verdict: experiment.control_verdict,
+    },
+    {
+      label: "Suspected setting",
+      id: experiment.suspect_preset_id,
+      version: experiment.suspect_preset_version,
+      lufs: experiment.suspect_lufs,
+      verdict: experiment.suspect_verdict,
+    },
+  ]
+
+  return (
+    <div className="panel enter">
+      <div className="flex items-baseline justify-between border-b border-rule px-4 py-2.5">
+        <span className="legend">We tested it</span>
+        <span
+          className="legend"
+          style={{
+            color: experiment.reproduces_defect
+              ? "var(--color-blocked)"
+              : "var(--color-legend)",
+          }}
+        >
+          {experiment.reproduces_defect
+            ? "the fault was reproduced"
+            : "the fault was not reproduced"}
+        </span>
+      </div>
+
+      <p className="px-4 pt-3 text-[0.8125rem] text-read">
+        Same file, same step, run twice — once with the setting that normally
+        runs, once with the suspected one.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 divide-x divide-rule border-t border-rule">
+        {arms.map((arm) => {
+          const bad = arm.verdict === "BLOCKED"
+          return (
+            <div key={arm.id} className="px-4 py-3">
+              <div className="legend">{arm.label}</div>
+              <div
+                className="meter mt-1 text-2xl"
+                style={{
+                  color: bad ? "var(--color-blocked)" : "var(--color-inspec)",
+                }}
+              >
+                {arm.lufs.toFixed(1)}
+              </div>
+              <div className="meter mt-1 text-[0.6875rem] text-legend">
+                {arm.id} v{arm.version}
+              </div>
+              <div
+                className="legend mt-1"
+                style={{
+                  color: bad ? "var(--color-blocked)" : "var(--color-inspec)",
+                }}
+              >
+                {bad ? "would be rejected" : "would be accepted"}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="border-t border-rule px-4 py-3">
+        <div className="flex items-baseline gap-2">
+          <span
+            className="meter text-lg"
+            style={{ color: "var(--color-pending)" }}
+          >
+            {experiment.delta_lu >= 0 ? "+" : ""}
+            {experiment.delta_lu.toFixed(2)} LU
+          </span>
+          <span className="legend">difference caused by the setting</span>
+        </div>
+        <p className="legend mt-2 leading-relaxed">{experiment.caveat}</p>
+      </div>
     </div>
   )
 }

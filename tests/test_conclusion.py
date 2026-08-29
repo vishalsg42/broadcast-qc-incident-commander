@@ -14,9 +14,9 @@ from agent.conclusion import (
     screen_candidate,
 )
 from agent.evidence import (
+    PHASE_ORDER,
     ClaimType,
     EvidenceLedger,
-    Phase,
     allowlist_from_profile,
     validate_conclusion,
 )
@@ -33,7 +33,7 @@ def allowlist() -> dict:
 @pytest.fixture
 def ledger() -> EvidenceLedger:
     led = EvidenceLedger(run_id="run-test")
-    for phase in Phase:
+    for phase in PHASE_ORDER:
         led.observe(phase, f"query for {phase.value}", {"data": phase.value})
         led.record_interpretation(finding=f"{phase.value} finding", supports=True)
     return led

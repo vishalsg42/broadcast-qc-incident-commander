@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.evidence import EvidenceLedger, Phase
+from agent.evidence import PHASE_ORDER, EvidenceLedger, Phase
 from agent.grafana import GrafanaClient, GrafanaConfig, GrafanaError
 from agent.investigator import InvestigationError, Investigator
 from pipeline import telemetry
@@ -158,7 +158,7 @@ class TestEvidenceProvenance:
         led.record_interpretation(finding="channels summed", supports=True)
 
         assert len(led.steps) == 4
-        assert all(led.phase_complete(p) for p in Phase)
+        assert all(led.phase_complete(p) for p in PHASE_ORDER)
         assert [s.phase for s in led.steps] == list(Phase)
 
 

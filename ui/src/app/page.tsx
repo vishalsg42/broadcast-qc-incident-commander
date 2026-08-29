@@ -10,6 +10,7 @@ import {
   AllowlistPanel,
   AttributionPanel,
   ConclusionPanel,
+  ExperimentPanel,
   ProposalPanel,
   SignalPath,
   UnmeasurablePanel,
@@ -203,6 +204,10 @@ export default function ControlRoom() {
             )}
             <UnmeasurablePanel event={state.unmeasurable} />
             <EvidenceTable rows={state.evidence} activePhase={state.activePhase} />
+            <ExperimentPanel
+              running={state.experimentRunning}
+              experiment={state.experiment}
+            />
             <ConclusionPanel conclusion={state.conclusion} />
             <ProposalPanel
               approval={state.approval}

@@ -35,6 +35,7 @@ from agent.grafana import GrafanaClient, GrafanaConfig
 from agent.investigator import Investigator
 from agent.reasoner import GeminiReasoner, Reasoner, ScriptedReasoner
 from pipeline import telemetry
+from pipeline.experiment import ExperimentError, compare_presets
 from pipeline.policy import (
     BLOCKED,
     UNMEASURABLE,
@@ -266,6 +267,7 @@ class Orchestrator:
         source_ok = baseline.summary["source_in_spec"]
         preset_id = preset_version = changed_at = cause_detail = None
         recently_changed = None
+        experiment = None
         actor_summary: dict = {}
 
         if source_ok and failing:
@@ -292,6 +294,10 @@ class Orchestrator:
             cause_detail = f"{preset.audio_filter} sums both channels into each output channel"
             self._interpret(run, reasoner, ledger, Phase.CAUSE, cause)
 
+            experiment = self._run_experiment(
+                run, pr, profile, failing, preset, ledger, reasoner
+            )
+
         # 3. the refusal - deterministic, through the production validator
         for candidate in adversarial_candidates(ledger):
             result = screen_candidate(candidate, ledger, allowlist)
@@ -315,6 +321,7 @@ class Orchestrator:
             changed_by=actor_summary.get("preset_changed_by"),
             change_ticket=actor_summary.get("preset_change_ticket"),
             approved_by=actor_summary.get("preset_approved_by"),
+            experiment=experiment.to_dict() if experiment else None,
             cause_detail=cause_detail,
             delivery_profile_id=profile.id,
         )
@@ -410,6 +417,59 @@ class Orchestrator:
             incident_detail=incident.detail,
         )
         run.status = Status.DONE
+
+    def _run_experiment(self, run, pr, profile, failing_stage, suspect, ledger, reasoner):
+        """Test the suspect preset instead of inferring from its filter string.
+
+        Runs the input the failing stage actually consumed through the stage's
+        DEFAULT preset and through the suspect one, and measures both. The
+        control is what would normally have run, so a control that also fails
+        says the input was already bad and the preset is not the story.
+
+        Returns the result, or None when there is nothing to compare or the
+        experiment could not produce a measurement worth reporting. A failed
+        experiment must never fail the investigation - it is corroboration, and
+        the investigation stands or falls on the telemetry either way.
+        """
+        library = PresetLibrary.load()
+        control = library.default_for(failing_stage)
+        if control.id == suspect.id:
+            return None
+
+        stage_result = pr.stage(failing_stage)
+        if stage_result is None:
+            return None
+        # The input the failing stage consumed - NOT the source. Those differ by
+        # a normalisation pass, and measuring the wrong one would compare the
+        # preset against a file that never entered the stage.
+        stage_input = stage_result.input_path
+
+        run.emit(
+            "experiment_started", stage=failing_stage, control=control.id, suspect=suspect.id
+        )
+        try:
+            result = compare_presets(
+                input_path=stage_input,
+                stage=failing_stage,
+                control_preset=control,
+                suspect_preset=suspect,
+                profile=profile,
+                black_opts=profile.black_detector_opts,
+            )
+        except ExperimentError as exc:
+            run.emit("experiment_failed", reason=str(exc))
+            return None
+
+        payload = result.to_dict()
+        query = (
+            f"experiment: re-ran stage {failing_stage!r} on "
+            f"{Path(stage_input).name} with {control.id} (control) and "
+            f"{suspect.id} (suspect), measuring each"
+        )
+        ledger.observe(Phase.EXPERIMENT, query, payload)
+        reasoner.interpret(ledger, Phase.EXPERIMENT, payload)
+        run.emit("experiment", **payload)
+        return result
 
     def _interpret(self, run, reasoner, ledger, phase, phase_result) -> None:
         run.emit("phase_started", phase=phase.value, question_summary=phase_result.summary)

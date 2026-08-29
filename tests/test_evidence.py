@@ -14,6 +14,7 @@ import yaml
 from pydantic import ValidationError
 
 from agent.evidence import (
+    PHASE_ORDER,
     Claim,
     ClaimType,
     Conclusion,
@@ -90,7 +91,7 @@ class TestProvenanceIsControllerBound:
 
 class TestPhaseCompletion:
     def test_controller_decides_completion(self, ledger):
-        assert all(ledger.phase_complete(p) for p in Phase)
+        assert all(ledger.phase_complete(p) for p in PHASE_ORDER)
 
     def test_incomplete_phase_is_detected(self):
         led = EvidenceLedger()

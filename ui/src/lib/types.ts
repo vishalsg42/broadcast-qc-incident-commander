@@ -114,6 +114,8 @@ export interface GenericEvent {
   kind:
     | "started"
     | "stage_started"
+    | "experiment_started"
+    | "experiment_failed"
     | "investigation_started"
     | "phase_started"
     | "escalated"
@@ -139,6 +141,7 @@ export type RunEvent =
   | TelemetryProgressEvent
   | AwaitingTelemetryEvent
   | UnmeasurableEvent
+  | ExperimentEvent
   | GenericEvent
 
 export interface Profile {
@@ -162,6 +165,23 @@ export interface ProfileList {
   profiles: Profile[]
 }
 
+export interface ExperimentEvent {
+  kind: "experiment"
+  stage: string
+  control_preset_id: string
+  control_preset_version: number
+  control_lufs: number
+  control_verdict: Verdict
+  suspect_preset_id: string
+  suspect_preset_version: number
+  suspect_lufs: number
+  suspect_verdict: Verdict
+  delta_lu: number
+  reproduces_defect: boolean
+  /** Why the delta must not be quoted as a property of the preset. */
+  caveat: string
+}
+
 export interface UnmeasurableEvent {
   kind: "unmeasurable"
   profile_id: string
@@ -181,6 +201,7 @@ export interface UnmeasurableEvent {
  */
 export const PHASE_QUESTIONS: Record<string, string> = {
   BASELINE: "Did the file arrive already broken?",
+  EXPERIMENT: "Does that setting really cause this?",
   DIVERGENCE: "Which step changed it?",
   ACTOR: "Which setting did that step use?",
   CAUSE: "What does that setting actually do?",

@@ -1,12 +1,19 @@
 {
   "title": "Broadcast QC - delivery attribution",
   "uid": "qc-incident-commander",
-  "tags": ["qc", "delivery", "broadcast"],
+  "tags": [
+    "qc",
+    "delivery",
+    "broadcast"
+  ],
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
   "refresh": "30s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
@@ -14,7 +21,10 @@
         "label": "Delivery run",
         "type": "textbox",
         "query": "",
-        "current": { "text": "", "value": "" },
+        "current": {
+          "text": "",
+          "value": ""
+        },
         "description": "Leave empty for every run, or paste one qc_run_id to follow a single delivery end to end."
       }
     ]
@@ -23,7 +33,12 @@
     {
       "type": "text",
       "title": "What this dashboard is for",
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "options": {
         "mode": "markdown",
         "content": "A delivery is blocked by a **deterministic gate** - no AI decides compliance. The investigation then has to answer *which configuration did this, and who changed it*.\n\nEverything below is written by the pipeline itself: measurements to **Loki**, preset attribution and change provenance to **Tempo** span attributes, and an annotation plus an IRM incident on write-back. The agent reads these same signals through the official Grafana MCP server, restricted to read-only tools."
@@ -33,8 +48,16 @@
       "type": "logs",
       "title": "QC measurements - every stage of every delivery",
       "description": "One line per stage. qc_verdict is the deterministic gate's decision, not a model's.",
-      "gridPos": { "h": 9, "w": 14, "x": 0, "y": 4 },
-      "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
       "options": {
         "showTime": true,
         "wrapLogMessage": true,
@@ -45,7 +68,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
           "expr": "{service_name=\"qc-pipeline\"} | qc_stage != `` | qc_run_id =~ `$run_id.*`",
           "queryType": "range"
         }
@@ -55,16 +81,33 @@
       "type": "stat",
       "title": "Blocked deliveries",
       "description": "Stages the gate refused. A blocked stage is what starts an investigation.",
-      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 4 },
-      "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 14,
+        "y": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
       "options": {
-        "reduceOptions": { "calcs": ["max"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "max"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "background",
         "graphMode": "area"
       },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "red" },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
           "unit": "short"
         },
         "overrides": []
@@ -72,7 +115,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
           "expr": "sum(count_over_time({service_name=\"qc-pipeline\"} | qc_verdict = `BLOCKED` [$__range]))",
           "queryType": "range"
         }
@@ -81,16 +127,33 @@
     {
       "type": "stat",
       "title": "Stages measured",
-      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 4 },
-      "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 19,
+        "y": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
       "options": {
-        "reduceOptions": { "calcs": ["max"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "max"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "background",
         "graphMode": "area"
       },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "green" },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
           "unit": "short"
         },
         "overrides": []
@@ -98,7 +161,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
           "expr": "sum(count_over_time({service_name=\"qc-pipeline\"} | qc_stage != `` [$__range]))",
           "queryType": "range"
         }
@@ -108,19 +174,34 @@
       "type": "timeseries",
       "title": "Integrated loudness by stage",
       "description": "The shape of the fault: flat through ingest and normalize, then a jump at the stage that broke it.",
-      "gridPos": { "h": 5, "w": 10, "x": 14, "y": 8 },
-      "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+      "gridPos": {
+        "h": 5,
+        "w": 10,
+        "x": 14,
+        "y": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "custom": { "drawStyle": "points", "pointSize": 6, "showPoints": "always" }
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6,
+            "showPoints": "always"
+          }
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "loki", "uid": "grafanacloud-logs" },
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
           "expr": "avg_over_time({service_name=\"qc-pipeline\"} | qc_stage != `` | unwrap qc_integrated_lufs [$__auto]) by (qc_stage)",
           "queryType": "range"
         }
@@ -130,12 +211,23 @@
       "type": "table",
       "title": "Preset attribution and change provenance",
       "description": "Which preset version ran, who changed it, under what ticket, and who approved it - read from Tempo span attributes. This is the question a facility actually asks, and it is why the trace carries provenance rather than just timing.",
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 13 },
-      "datasource": { "type": "tempo", "uid": "grafanacloud-traces" },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "grafanacloud-traces"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "tempo", "uid": "grafanacloud-traces" },
+          "datasource": {
+            "type": "tempo",
+            "uid": "grafanacloud-traces"
+          },
           "queryType": "traceql",
           "query": "{ name =~ \"stage.*\" } | select(.qc.stage, .qc.preset_id, .qc.preset_version, .qc.preset_changed_at, .qc.preset_changed_by, .qc.preset_change_ticket, .qc.preset_approved_by)",
           "limit": 50,
@@ -144,18 +236,30 @@
       ]
     },
     {
-      "type": "traces",
-      "title": "Delivery traces - one asset's journey",
-      "description": "delivery.run is the root; each stage is a child span. Open one and read the span attributes to see exactly which configuration produced the delivered file.",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 22 },
-      "datasource": { "type": "tempo", "uid": "grafanacloud-traces" },
+      "type": "table",
+      "title": "Delivery runs - click a trace to open the waterfall",
+      "description": "One row per delivery. The traceId opens the full waterfall: delivery.run as root with a stage.* child per pipeline stage, each carrying the preset that produced it.",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "grafanacloud-traces"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "tempo", "uid": "grafanacloud-traces" },
+          "datasource": {
+            "type": "tempo",
+            "uid": "grafanacloud-traces"
+          },
           "queryType": "traceql",
-          "query": "{ name = \"delivery.run\" }",
-          "limit": 20
+          "query": "{ name = \"delivery.run\" } | select(.qc.run_id, .qc.asset_id, .qc.source_path)",
+          "limit": 30,
+          "tableType": "spans"
         }
       ]
     }
@@ -166,8 +270,18 @@
         "name": "QC write-back",
         "enable": true,
         "iconColor": "red",
-        "target": { "type": "tags", "matchAny": false, "tags": ["qc"], "limit": 100 },
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" }
+        "target": {
+          "type": "tags",
+          "matchAny": false,
+          "tags": [
+            "qc"
+          ],
+          "limit": 100
+        },
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        }
       }
     ]
   }

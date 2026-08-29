@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from agent.investigator import _changed_recently
 from pipeline.policy import BLOCKED, PASS, Profile, evaluate
 from pipeline.stages import (
     INGEST,
@@ -71,8 +72,11 @@ class TestPresetLibrary:
         """The fault ships as a preset entry with a changed_at, like a real one."""
         bad = presets.get(PACKAGE, "pkg_h264_v7")
         assert bad.version == 7
-        assert bad.changed_at == "2026-08-29T14:02:00Z"
         assert "c0+c1" in bad.audio_filter
+        # Asserted as a PROPERTY, not a literal. This preset uses
+        # changed_hours_ago so the scenario stays "recently changed" whenever the
+        # demo runs; a hardcoded timestamp is exactly what made it go stale.
+        assert _changed_recently(bad.changed_at) is True
 
     def test_unknown_preset_raises(self, presets):
         with pytest.raises(KeyError):
@@ -130,7 +134,9 @@ class TestFaultedRun:
     def test_responsible_preset_is_attributable(self, faulted_run):
         pkg = faulted_run.stage(PACKAGE)
         assert pkg.preset.id == "pkg_h264_v7"
-        assert pkg.preset.changed_at == "2026-08-29T14:02:00Z"
+        assert pkg.preset.version == 7
+        # Recent by construction, whatever day this runs.
+        assert _changed_recently(pkg.preset.changed_at) is True
 
 
 class TestRunShape:

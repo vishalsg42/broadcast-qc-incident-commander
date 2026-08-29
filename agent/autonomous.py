@@ -376,7 +376,11 @@ class AutonomousInvestigator:
         return {"ok": True, **self._experiment_payload}
 
     def _tool_conclude(
-        self, claims_json: str, action_id: str = "", rationale: str = ""
+        self,
+        claims_json: str,
+        action_id: str = "",
+        rationale: str = "",
+        target_lufs: float = 0.0,
     ) -> dict:
         """Submit your conclusion once you can explain the failure.
 
@@ -440,11 +444,20 @@ class AutonomousInvestigator:
 
         action = None
         if action_id:
+            # Each allowlisted action takes different parameters, and the prompt
+            # advertises all of them. Without a branch per action the model could
+            # propose reencode_with_loudness_target, be told 'missing parameter
+            # target_lufs', and have no way to supply it - so it retried until
+            # the budget was gone, having already reached the right answer.
+            if action_id == "reencode_with_profile":
+                params: dict = {"profile_id": self.profile.id}
+            elif action_id == "reencode_with_loudness_target":
+                params = {"target_lufs": float(target_lufs or self.profile.loudness_target[0])}
+            else:
+                params = {"reason": rationale or "escalated by the investigation"}
             action = ProposedAction(
                 action_id=action_id,
-                params={"profile_id": self.profile.id}
-                if action_id == "reencode_with_profile"
-                else {"reason": rationale or "escalated by the investigation"},
+                params=params,
                 rationale=rationale or "proposed by the investigation",
             )
         try:
@@ -566,7 +579,12 @@ class AutonomousInvestigator:
             """
             return self._tool_run_preset_experiment(suspect_preset_id, stage)
 
-        def conclude(claims_json: str, action_id: str = "", rationale: str = "") -> dict:
+        def conclude(
+            claims_json: str,
+            action_id: str = "",
+            rationale: str = "",
+            target_lufs: float = 0.0,
+        ) -> dict:
             """Submit your conclusion once you can explain the failure.
 
             Args:
@@ -579,8 +597,10 @@ class AutonomousInvestigator:
                 action_id: The remediation you propose, from the allowlist, or
                     "" to propose none.
                 rationale: Why that action, in one sentence.
+                target_lufs: Required only for reencode_with_loudness_target;
+                    the loudness to normalise to, e.g. -23.0.
             """
-            return self._tool_conclude(claims_json, action_id, rationale)
+            return self._tool_conclude(claims_json, action_id, rationale, target_lufs)
 
         agent = LlmAgent(
             name="qc_investigator",
@@ -629,8 +649,14 @@ class AutonomousInvestigator:
                 exhausted = True
                 log.warning("agentic investigation exhausted its LLM call budget")
         finally:
-            with contextlib.suppress(Exception):
+            try:
                 await toolset.close()
+            except Exception as exc:  # noqa: BLE001 - reported, never fatal
+                # Each investigation spawns an mcp-grafana subprocess. A failed
+                # teardown leaks one on an instance that never restarts, and
+                # suppressing the error made that leak undetectable.
+                log.warning("MCP teardown failed: %s", exc)
+                self._emit("mcp_teardown_failed", error=str(exc)[:200])
 
         return InvestigationResult(
             conclusion=self._conclusion,

@@ -46,7 +46,7 @@ from pipeline.policy import (
     evaluate,
     load_profile,
 )
-from pipeline.remediation import execute_repair
+from pipeline.remediation import RemediationError, execute_repair
 from pipeline.stages import NORMALIZE, PACKAGE, PresetLibrary, run_pipeline
 
 # How many finished runs stay addressable for the UI to reconnect to.
@@ -515,14 +515,36 @@ class Orchestrator:
         # 6. repair + re-validate
         run.status = Status.REPAIRING
         run.emit("repairing")
-        repair = execute_repair(
-            action.action_id,
-            action.params,
-            source_path=pr.stage(NORMALIZE).output_path,
-            profile=profile,
-            out_dir=self.out_dir,
-            allowlist=self.allowlist,
-        )
+        try:
+            repair = execute_repair(
+                action.action_id,
+                action.params,
+                source_path=pr.stage(NORMALIZE).output_path,
+                profile=profile,
+                out_dir=self.out_dir,
+                # The PER-RUN allowlist, not the orchestrator's. They are
+                # identical today because every profile carries the same
+                # actions; they stop being identical the moment one narrows,
+                # and the executor would then authorise against the wrong spec
+                # after a human had already approved.
+                allowlist=allowlist,
+            )
+        except RemediationError as exc:
+            # A repair that could not RUN and one that ran and did not clear the
+            # gate are the same thing to an operator: an approved fix that did
+            # not fix it. They converge here rather than one escalating and the
+            # other dying with a stack trace in a UI event.
+            run.emit(
+                "escalated",
+                reason=(
+                    f"The approved repair could not be executed: {exc}. The "
+                    "asset is unresolved and no further automated action will "
+                    "be proposed. A human needs to look at this."
+                ),
+            )
+            run.status = Status.FAILED
+            run.error = f"repair could not be executed: {exc}"
+            return
         run.emit(
             "repaired",
             resolved=repair.resolved,

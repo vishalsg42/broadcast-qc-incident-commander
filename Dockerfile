@@ -39,8 +39,12 @@ RUN chmod +x fetch_mcp_grafana.sh && ./fetch_mcp_grafana.sh /out
 FROM python:3.12-slim
 
 # ffmpeg for measurement (ebur128, blackdetect) and for the repair re-encode.
+# tini because the CMD below execs uvicorn as PID 1, and PID 1 is what
+# orphaned processes re-parent to. uvicorn never calls wait(), so a
+# subprocess that outlives its parent becomes an unreapable zombie holding
+# its memory on an instance that never restarts.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
+ && apt-get install -y --no-install-recommends ffmpeg tini \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -81,4 +85,5 @@ EXPOSE 8080
 # not the point of a demo; correctness is.
 # JSON form so the shell is explicit and `exec` replaces it - uvicorn then
 # receives SIGTERM directly, which is how Cloud Run asks for a graceful stop.
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["sh", "-c", "exec uvicorn server.app:app --host 0.0.0.0 --port ${PORT} --workers 1 --timeout-keep-alive 75"]

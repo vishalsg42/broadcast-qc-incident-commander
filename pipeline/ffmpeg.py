@@ -16,7 +16,10 @@ FFPROBE = "ffprobe"
 # seek nor progressively play - which makes a working demo look broken on camera.
 FASTSTART = ["-movflags", "+faststart"]
 
-_BASE = ["-hide_banner", "-nostats", "-loglevel", "error"]
+# -threads 2 because ffmpeg auto-detects the HOST's core count, not the
+# container's CPU quota, and then spawns eight to sixteen threads that get
+# CFS-throttled against two vCPUs. Matching the quota removes the variable.
+_BASE = ["-hide_banner", "-nostats", "-loglevel", "error", "-threads", "2"]
 
 
 class FFmpegError(RuntimeError):

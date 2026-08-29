@@ -66,7 +66,15 @@ scripts/
 source scripts/activate_env.sh     # isolates gcloud/ADC, loads .env, activates venv
 ./scripts/guard_env.sh             # MUST print OK before any cloud call
 ./scripts/make_fixtures.sh         # regenerate test media (gitignored)
-pytest                             # full suite
+
+pytest -m "not media and not integration"   # ~3s  - the iteration loop
+pytest -m "not integration"                 # ~2m  - adds real ffmpeg
+pytest                                      # ~4m  - adds live Loki/Tempo
+
+python scripts/demo.py --fixture fault        # block -> investigate -> repair
+python scripts/demo.py --fixture source-bad   # escalates, proposes NO repair
+python scripts/demo.py --fixture clean        # no investigation, no action
+python scripts/demo.py --reasoner gemini      # same loop, model writes findings
 python -m pipeline.qc media/master_good.mp4
 python -m pipeline.policy media/master_hot.mp4
 python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
@@ -85,6 +93,9 @@ python -m pipeline.stages media/master_good.mp4 pkg_h264_v7   # inject the fault
 - **Pure functions where possible.** `policy.evaluate()` is pure and must stay so.
 - **Comments explain *why*, never *what*.** Prefer a comment that records a
   decision or a trap over one that narrates the code.
+- **Three test tiers.** Pure unit tests must stay fast enough to run on every
+  save; `media` shells out to ffmpeg; `integration` needs the Grafana stack.
+  Never let a pure unit test acquire a subprocess or a socket.
 - **Tests must prove the guard fires**, not merely that the happy path works. A
   validator with no test showing it reject something is indistinguishable from a
   costume.

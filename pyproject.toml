@@ -38,4 +38,5 @@ pythonpath = ["."]
 addopts = "-q"
 markers = [
     "integration: needs the local Grafana stack (docker compose -f docker/docker-compose.yml up -d)",
+    "media: shells out to ffmpeg against real fixtures; slow by nature",
 ]

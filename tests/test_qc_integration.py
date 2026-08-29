@@ -20,10 +20,13 @@ from pipeline.qc import run_qc
 MEDIA = Path(__file__).parent.parent / "media"
 PROFILE = Path(__file__).parent.parent / "pipeline" / "profiles" / "ebu_r128.yaml"
 
-pytestmark = pytest.mark.skipif(
-    not (MEDIA / "master_good.mp4").exists(),
-    reason="fixtures missing - run scripts/make_fixtures.sh",
-)
+pytestmark = [
+    pytest.mark.media,
+    pytest.mark.skipif(
+        not (MEDIA / "master_good.mp4").exists(),
+        reason="fixtures missing - run scripts/make_fixtures.sh",
+    ),
+]
 
 
 @pytest.fixture(scope="module")

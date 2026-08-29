@@ -32,9 +32,15 @@ from agent.conclusion import (
     render_prose,
     screen_candidate,
 )
-from agent.evidence import EvidenceLedger, allowlist_from_profile, validate_conclusion
+from agent.evidence import (
+    EvidenceLedger,
+    Phase,
+    allowlist_from_profile,
+    validate_conclusion,
+)
 from agent.grafana import GrafanaClient, GrafanaConfig
 from agent.investigator import Investigator
+from agent.reasoner import GeminiReasoner, ScriptedReasoner
 from pipeline import telemetry
 from pipeline.policy import BLOCKED, Profile, evaluate
 from pipeline.remediation import execute_repair
@@ -59,9 +65,16 @@ def main() -> int:
     ap.add_argument("--fixture", choices=sorted(FIXTURES), default="fault")
     ap.add_argument("--grafana", default="http://localhost:3000")
     ap.add_argument("--out-dir", default="out")
+    ap.add_argument(
+        "--reasoner",
+        choices=["scripted", "gemini"],
+        default="scripted",
+        help="scripted is deterministic and offline; gemini needs Vertex AI credentials",
+    )
     args = ap.parse_args()
 
     media, fault, blurb = FIXTURES[args.fixture]
+    reasoner = GeminiReasoner() if args.reasoner == "gemini" else ScriptedReasoner()
     profile = Profile.load(PROFILE_PATH)
     with PROFILE_PATH.open() as fh:
         allowlist = allowlist_from_profile(yaml.safe_load(fh))
@@ -111,27 +124,10 @@ def main() -> int:
     )
 
     baseline = inv.gather_baseline()
-    ledger.record_interpretation(
-        finding=(
-            f"Source measured {baseline.summary['integrated_lufs']} LUFS at ingest: "
-            f"{'in spec' if baseline.summary['source_in_spec'] else 'ALREADY out of spec'}."
-        ),
-        supports=True,
-    )
-    print(f"  BASELINE    source_in_spec={baseline.summary['source_in_spec']}")
+    print(f"  BASELINE    {reasoner.interpret(ledger, Phase.BASELINE, baseline.summary)}")
 
     divergence = inv.gather_divergence()
-    ledger.record_interpretation(
-        finding=(
-            f"In spec through {divergence.summary['last_good_stage']}; "
-            f"first out of spec at {divergence.summary['first_failing_stage']}."
-        ),
-        supports=True,
-    )
-    print(
-        f"  DIVERGENCE  last_good={divergence.summary['last_good_stage']} "
-        f"first_failing={divergence.summary['first_failing_stage']}"
-    )
+    print(f"  DIVERGENCE  {reasoner.interpret(ledger, Phase.DIVERGENCE, divergence.summary)}")
 
     failing = divergence.summary["first_failing_stage"]
     preset_id = preset_version = changed_at = cause_detail = None
@@ -141,13 +137,7 @@ def main() -> int:
         preset_id = actor.summary["preset_id"]
         preset_version = actor.summary["preset_version"]
         changed_at = actor.summary["preset_changed_at"]
-        ledger.record_interpretation(
-            finding=f"Trace shows {failing} executed preset {preset_id} v{preset_version}.",
-            supports=True,
-        )
-        print(
-            f"  ACTOR       {failing} ran {preset_id} v{preset_version} (changed {changed_at})"
-        )
+        print(f"  ACTOR       {reasoner.interpret(ledger, Phase.ACTOR, actor.summary)}")
 
         preset = PresetLibrary.load().get(failing, preset_id)
         cause = inv.gather_cause(
@@ -159,8 +149,7 @@ def main() -> int:
             },
         )
         cause_detail = f"{preset.audio_filter} sums both channels into each output channel"
-        ledger.record_interpretation(finding=cause_detail, supports=True)
-        print(f"  CAUSE       {cause.summary['audio_filter']}")
+        print(f"  CAUSE       {reasoner.interpret(ledger, Phase.CAUSE, cause.summary)}")
 
     # ---- 3. the refusal ------------------------------------------------------
     rule("REFUSAL - adversarial candidates through the PRODUCTION validator")

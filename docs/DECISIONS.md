@@ -274,3 +274,68 @@ does not depend on a stock clip's licensing.
 file from 45s of input (AAC edit-list accumulation across segments). Use the
 concat **filter** in a single pass. And every output needs `-movflags +faststart`,
 or a browser cannot seek and a working demo looks broken on camera.
+
+---
+
+## D16 — Retrieval is deterministic; only interpretation is model work
+
+**Decision.** All four investigation phases retrieve their evidence with
+controller-written queries. The model is handed one result at a time and asked
+one fixed question about it.
+
+**Why.** "Fetch the ingest QC line for this run" needs no model, and dressing it
+up as agentic reasoning would be theatre. What genuinely needs judgement is what
+each result *means*, whether it supports or refutes the emerging explanation, and
+what to propose — and that is exactly the surface the model gets.
+
+**The objection this has to survive.** A judge greps for *"is the query actually
+derived from the previous result, or a static string?"* Here the queries are
+templates parameterised by prior results — `gather_actor(failing_stage)` cannot
+be written until DIVERGENCE returns a stage — and the controller records the
+exact query that ran. The determinism is documented rather than disguised.
+
+---
+
+## D17 — `Reasoner` protocol with two implementations
+
+**Decision.** `GeminiReasoner` (ADK + Vertex) and `ScriptedReasoner`
+(deterministic), behind one interface. `demo.py --reasoner scripted|gemini`.
+
+**Why.** Three reasons, in order. The loop stays testable with no cloud
+dependency and no token burn. Demo takes are reproducible, so a recording does
+not depend on the model phrasing things well on the fourth attempt. And the swap
+is one flag, which means the model can be wired in the moment credentials exist
+rather than being a blocking dependency for everything downstream.
+
+**Not a mock.** `ScriptedReasoner` goes through `safe_record_interpretation`
+exactly as the real one does, so provenance binding, validation and the refusal
+path are all genuinely exercised.
+
+---
+
+## D18 — Controller-side retry, because ADK guarantees order not action
+
+**Decision.** If the model answers without calling `record_evidence`, the
+controller re-prompts up to `max_attempts` and then raises.
+
+**Why.** `SequentialAgent` guarantees that sub-agents run in order. It does not
+guarantee that a tool was called, that the expected query was used, or that
+evidence exists. Without a controller-side check, a phase can silently complete
+having recorded nothing, and the citation validator would then reject a
+conclusion for a reason that looks like a model failure but is actually a
+plumbing failure.
+
+---
+
+## D19 — Three test tiers
+
+**Decision.** Pure unit (~3s), `media` (shells out to ffmpeg, ~2m), `integration`
+(needs live Loki/Tempo, ~4m).
+
+**Why.** The reviews were emphatic that a fast iteration loop is mandatory and
+unbudgeted. Real ffmpeg fixtures cost 15–42s of setup each, which is fine for a
+pre-commit run and fatal for a per-save one.
+
+**Trap worth recording.** Two suites running concurrently against the same Docker
+stack and ffmpeg look exactly like a hang. Kill stray runs before diagnosing a
+"regression".

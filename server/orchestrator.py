@@ -140,13 +140,21 @@ class Orchestrator:
         with PROFILE_PATH.open() as fh:
             self.allowlist = allowlist_from_profile(yaml.safe_load(fh))
 
-    # Statuses where a run is still doing something, or someone is still waiting
-    # on it. AWAITING_APPROVAL lasts up to five minutes, and evicting one leaves
-    # the approve button permanently returning 409 while the worker blocks for
-    # the full timeout.
+    # Two different questions, two different sets.
+    #
+    # ACTIVE_STATUSES: is anyone still relying on this run? Includes
+    # AWAITING_APPROVAL, because evicting a run mid-approval leaves the approve
+    # button returning 409 forever while the worker blocks for the full timeout.
     ACTIVE_STATUSES = frozenset(
         {Status.PENDING, Status.RUNNING, Status.AWAITING_APPROVAL, Status.REPAIRING}
     )
+
+    # WORKING_STATUSES: is this run consuming CPU right now? A run parked at the
+    # approval gate is not - it is waiting on a human, and one ffmpeg pass is
+    # what actually saturates the vCPUs. Counting the waiting ones would let two
+    # abandoned tabs lock every other visitor out for the full five-minute
+    # approval timeout, which is a worse failure than the contention it prevents.
+    WORKING_STATUSES = frozenset({Status.PENDING, Status.RUNNING, Status.REPAIRING})
 
     def _evict_old_runs(self) -> None:
         """Drop the oldest FINISHED runs, and their artefacts with them.
@@ -196,12 +204,12 @@ class Orchestrator:
             load_profile(profile_id)
         except KeyError as exc:
             raise ValueError(str(exc)) from exc
-        active = sum(1 for r in self._runs.values() if r.status in self.ACTIVE_STATUSES)
-        if active >= MAX_ACTIVE_RUNS:
+        working = sum(1 for r in self._runs.values() if r.status in self.WORKING_STATUSES)
+        if working >= MAX_ACTIVE_RUNS:
             raise TooManyRuns(
-                f"{active} run(s) already in progress. Each run holds ffmpeg for "
-                "about a minute, so they are queued rather than run at once. "
-                "Try again shortly."
+                f"{working} run(s) already measuring. Each holds ffmpeg for about "
+                "a minute, so they are queued rather than run at once. Try again "
+                "shortly."
             )
         run = Run(run_id=f"ui-{uuid.uuid4().hex[:10]}", fixture=fixture, profile_id=profile_id)
         self._runs[run.run_id] = run

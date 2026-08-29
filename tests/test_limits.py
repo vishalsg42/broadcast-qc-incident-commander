@@ -356,8 +356,25 @@ class TestConcurrentRunsAreBounded:
             run = Run(run_id=f"live{i}", fixture="fault")
             run.status = Status.RUNNING
             o._runs[run.run_id] = run
-        with pytest.raises(TooManyRuns, match="already in progress"):
+        with pytest.raises(TooManyRuns, match="already measuring"):
             o.start("clean")
+
+    def test_runs_waiting_for_a_human_do_not_block_new_ones(self, tmp_path):
+        """An abandoned tab must not lock everyone out for the approval timeout.
+
+        A run parked at the approval gate consumes no CPU. Counting it would let
+        two closed tabs deny the service for five minutes, which is worse than
+        the contention the bound exists to prevent.
+        """
+        o = Orchestrator(grafana_url="http://localhost:3000", out_dir=str(tmp_path))
+        for i in range(MAX_ACTIVE_RUNS + 3):
+            run = Run(run_id=f"waiting{i}", fixture="fault")
+            run.status = Status.AWAITING_APPROVAL
+            o._runs[run.run_id] = run
+        working = sum(1 for r in o._runs.values() if r.status in o.WORKING_STATUSES)
+        assert working == 0, "runs awaiting approval counted as working"
+        # And they are still protected from eviction.
+        assert all(r.status in o.ACTIVE_STATUSES for r in o._runs.values())
 
     def test_finished_runs_do_not_count_against_the_limit(self, tmp_path):
         o = Orchestrator(grafana_url="http://localhost:3000", out_dir=str(tmp_path))

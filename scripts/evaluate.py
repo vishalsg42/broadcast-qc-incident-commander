@@ -138,7 +138,7 @@ def run_case(
         cause_result = inv.gather_cause(
             preset.id, {"audio_filter": preset.audio_filter, "changed_at": preset.changed_at}
         )
-        cause = f"{preset.audio_filter} sums both channels into each output channel"
+        cause = f"the {failing} stage applied {preset.audio_filter}"
         reasoner.interpret(ledger, Phase.CAUSE, cause_result.summary)
 
     conclusion = build_conclusion(

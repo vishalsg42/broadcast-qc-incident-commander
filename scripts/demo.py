@@ -159,7 +159,7 @@ def main() -> int:
                 "changed_at": preset.changed_at,
             },
         )
-        cause_detail = f"{preset.audio_filter} sums both channels into each output channel"
+        cause_detail = f"the {failing} stage applied {preset.audio_filter}"
         print(f"  CAUSE       {reasoner.interpret(ledger, Phase.CAUSE, cause.summary)}")
 
     # ---- 3. the refusal ------------------------------------------------------

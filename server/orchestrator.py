@@ -50,10 +50,30 @@ from pipeline.stages import NORMALIZE, PACKAGE, PresetLibrary, run_pipeline
 ROOT = Path(__file__).resolve().parent.parent
 PROFILE_PATH = ROOT / "pipeline" / "profiles" / "ebu_r128.yaml"
 
-FIXTURES = {
-    "fault": ("master_good.mp4", "pkg_h264_v7"),
-    "source-bad": ("master_hot.mp4", None),
-    "clean": ("master_good.mp4", None),
+# Scenario -> (source media, {stage: preset override}).
+#
+# Overrides are how a fault is injected: ordinary configuration, not a special
+# case in the pipeline. Each scenario has a DIFFERENT correct answer, and three
+# of them are wrong answers for the others - which is the point. A system that
+# reaches the same conclusion whatever it is shown has not concluded anything.
+FIXTURES: dict[str, tuple[str, dict[str, str]]] = {
+    # A preset changed hours ago and broke the delivery.
+    "fault": ("master_good.mp4", {PACKAGE: "pkg_h264_v7"}),
+    # The supplier's file was already out of spec. Not a pipeline fault; no
+    # repair should be proposed.
+    "source-bad": ("master_hot.mp4", {}),
+    # Nothing is wrong. The gate clears it and no investigation happens.
+    "clean": ("master_good.mp4", {}),
+    # A valid preset, unchanged since June, applied to content it does not suit:
+    # norm_ebu_v2 normalises to the OLD house target of -20 LUFS. Identical
+    # symptom to `fault` - loudness out of spec - and a completely different
+    # cause. Nothing changed, so the answer is preset SELECTION, and blaming a
+    # change would be wrong.
+    "wrong-preset": ("master_good.mp4", {NORMALIZE: "norm_ebu_v2"}),
+    # Not a loudness fault at all: two seconds of black inside the programme
+    # body. Every loudness measurement is in spec, so an investigation that
+    # reaches for the nearest preset is reaching for the wrong thing.
+    "black-fault": ("body_black.mp4", {}),
 }
 
 
@@ -133,7 +153,7 @@ class Orchestrator:
             run.emit("end", status=str(run.status))
 
     def _run_inner(self, run: Run, reasoner_name: str) -> None:
-        media, fault = FIXTURES[run.fixture]
+        media, overrides = FIXTURES[run.fixture]
         # The profile is per-run, so one asset can be adjudicated against
         # different delivery specs - including one this probe cannot measure.
         profile = load_profile(run.profile_id)
@@ -181,7 +201,7 @@ class Orchestrator:
             pr = run_pipeline(
                 ROOT / "media" / media,
                 out_dir=self.out_dir,
-                overrides={PACKAGE: fault} if fault else None,
+                overrides=overrides or None,
                 black_opts=profile.black_detector_opts,
                 profile=profile,
                 on_stage_start=lambda stage: run.emit("stage_started", stage=stage),
@@ -317,7 +337,11 @@ class Orchestrator:
                     "changed_at": preset.changed_at,
                 },
             )
-            cause_detail = f"{preset.audio_filter} sums both channels into each output channel"
+            # State what RAN, not a mechanism. The old wording described
+            # pkg_h264_v7's channel sum and was applied to every preset,
+            # so a loudnorm preset was reported as summing channels. The
+            # measured effect belongs to the experiment, which measures it.
+            cause_detail = f"the {failing} stage applied {preset.audio_filter}"
             self._interpret(run, reasoner, ledger, Phase.CAUSE, cause)
 
             experiment = self._run_experiment(
@@ -485,12 +509,16 @@ class Orchestrator:
             allowlist=allowlist,
             on_event=lambda kind, **kw: run.emit(kind, **kw),
         )
+        verdict = evaluate(profile, pr.stages[-1].qc)
         prompt = build_prompt(
             pipeline_run=pr,
             profile=profile,
             allowlist=allowlist,
             delivered_lufs=delivered,
             grafana_config=client.config,
+            failed_checks=[
+                f"{c.check_id}: {c.message}" for c in verdict.checks if c.status == BLOCKED
+            ],
         )
         result = investigator.investigate(prompt)
         run.emit(

@@ -19,9 +19,14 @@ import {
 import type { ProfileList } from "@/lib/types"
 import { useRun } from "@/lib/useRun"
 
+// Named for the SYMPTOM an operator would see, not the cause - the cause is
+// what the investigation is for. Two of these look identical from the outside
+// and are not the same problem.
 const FIXTURES = [
-  { id: "fault", label: "Preset fault" },
-  { id: "source-bad", label: "Source out of spec" },
+  { id: "fault", label: "Audio too loud — setting changed" },
+  { id: "wrong-preset", label: "Audio too loud — wrong setting" },
+  { id: "black-fault", label: "Black frames in the programme" },
+  { id: "source-bad", label: "Source arrived out of spec" },
   { id: "clean", label: "Nothing wrong" },
 ]
 

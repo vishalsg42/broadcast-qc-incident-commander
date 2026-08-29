@@ -46,7 +46,7 @@ import logging
 from dataclasses import dataclass, field
 
 from pipeline.experiment import ExperimentError, compare_presets
-from pipeline.stages import PresetLibrary
+from pipeline.stages import INGEST, INGEST_PRESET, PresetLibrary
 
 from .evidence import (
     Claim,
@@ -69,10 +69,16 @@ DEFAULT_MODEL = "gemini-2.5-flash"
 # than the run ending the demo. Exceeding it is handled, not crashed on.
 MAX_LLM_CALLS = 14
 
-# The investigation must actually happen before it can be concluded. Without a
-# floor, calling one tool and asserting a root cause satisfies every structural
-# check - min_length=1 on citations is not a standard of evidence.
-MIN_SOURCES_BEFORE_CONCLUDING = 3
+# The investigation must actually happen before it can be concluded: one query
+# and an assertion is not an investigation, and min_length=1 on citations is not
+# a standard of evidence.
+#
+# Two, not three. A higher floor is unreachable for a fault that arrived with the
+# source - there is no preset to look up and no earlier version to test, so the
+# agent could gather forever and never clear it. Attribution to a preset is
+# gated separately, by the requirement to test it, which is the constraint that
+# actually protects anything.
+MIN_SOURCES_BEFORE_CONCLUDING = 2
 
 # How many times the model may re-submit a rejected conclusion. Validator errors
 # are returned to it so it can correct itself, which is also exactly the shape
@@ -127,13 +133,20 @@ How to work:
 - Every tool result comes back with a `step_id`. That id is your evidence.
 - Quote concrete measured values. Never state a number you were not shown.
 - If something rules a theory OUT, that is a real finding. Say so.
-- When you can explain the failure, call `conclude` with claims that each cite
-  the step_id(s) that support them.
+- You MUST finish by calling `conclude`. Never end with prose - a conclusion
+  that is not submitted is not a conclusion. If the source arrived out of
+  spec, say so with SOURCE_OUT_OF_SPEC and propose escalate_to_human. If you
+  genuinely cannot determine the cause, conclude that too and escalate.
+- Each claim must cite the step_id(s) that support it.
 
 What matters:
 - A preset that RAN is not the same as a preset that CHANGED. Check whether it
   changed recently before blaming a change. If it has not changed in months, the
   likelier story is that the wrong preset was selected for this content.
+- Not every failure is a loudness failure, and not every failure is caused
+  by a preset. Read which check actually failed before forming a theory. A
+  defect present from the ingest stage onward arrived with the source and is
+  a supplier issue, not a pipeline one.
 - If you suspect a preset, you MUST test it with run_preset_experiment
   before blaming it. A preset that ran is not a preset that caused, and
   conclude will refuse an untested attribution.
@@ -249,10 +262,12 @@ class AutonomousInvestigator:
             preset_id: The preset id, e.g. 'pkg_h264_v7'.
             stage: Which pipeline stage it belongs to: ingest, normalize or package.
         """
-        try:
-            preset = PresetLibrary.load().get(stage, preset_id)
-        except KeyError as exc:
-            return {"ok": False, "error": str(exc)}
+        preset = _find_preset(stage, preset_id)
+        if preset is None:
+            return {
+                "ok": False,
+                "error": f"no preset {preset_id!r} for stage {stage!r}",
+            }
         return {
             "ok": True,
             "preset_id": preset.id,
@@ -283,10 +298,20 @@ class AutonomousInvestigator:
                 "conclude from the evidence you already have",
             }
         library = PresetLibrary.load()
-        try:
-            suspect = library.get(stage, suspect_preset_id)
-        except KeyError as exc:
-            return {"ok": False, "error": str(exc)}
+        suspect = _find_preset(stage, suspect_preset_id)
+        if suspect is None:
+            return {
+                "ok": False,
+                "error": f"no preset {suspect_preset_id!r} for stage {stage!r}",
+            }
+        if stage == INGEST:
+            return {
+                "ok": False,
+                "error": (
+                    "ingest admits the source unchanged - there is nothing to "
+                    "test. A defect present at ingest arrived with the source."
+                ),
+            }
         control = library.default_for(stage)
         if control.id == suspect.id:
             return {
@@ -565,8 +590,29 @@ class AutonomousInvestigator:
         return asyncio.run(self._investigate_async(prompt))
 
 
+def _find_preset(stage: str, preset_id: str):
+    """Resolve a preset, including the ingest passthrough.
+
+    Ingest runs a real preset that lives as a module constant rather than in
+    presets.yaml, so looking it up failed - exactly when the defect is present
+    from ingest onward and looking it up is the obvious next move.
+    """
+    if preset_id == INGEST_PRESET.id:
+        return INGEST_PRESET
+    try:
+        return PresetLibrary.load().get(stage, preset_id)
+    except KeyError:
+        return None
+
+
 def build_prompt(
-    *, pipeline_run, profile, allowlist: dict, delivered_lufs: float, grafana_config
+    *,
+    pipeline_run,
+    profile,
+    allowlist: dict,
+    delivered_lufs: float,
+    grafana_config,
+    failed_checks: list[str] | None = None,
 ) -> str:
     """Everything the agent needs to start, and nothing it should have to guess.
 
@@ -582,11 +628,23 @@ def build_prompt(
     """
     target, tolerance = profile.loudness_target
     run_id = pipeline_run.run_id
+    # State WHICH checks failed rather than assuming loudness. The profile also
+    # enforces true peak and a black-frame policy, and a prompt that opens with
+    # a loudness figure sends the agent hunting for a loudness cause on an asset
+    # whose loudness is perfectly in spec.
+    if failed_checks:
+        failures = "The gate failed these checks:\n" + "".join(
+            f"  - {c}\n" for c in failed_checks
+        )
+    else:
+        failures = (
+            f"Delivered loudness {delivered_lufs} LUFS against a target of "
+            f"{target} +/- {tolerance} LU.\n"
+        )
     return (
         f"Delivery run {run_id} (asset {pipeline_run.asset_id}) was BLOCKED by "
         f"the {profile.id} profile.\n"
-        f"Delivered loudness {delivered_lufs} LUFS against a target of "
-        f"{target} +/- {tolerance} LU.\n\n"
+        f"{failures}\n"
         f"The pipeline ran three stages in order: ingest, normalize, package.\n"
         f"Each stage applied a transcode PRESET. Preset ids look like "
         f"'ingest_passthrough_v1', 'norm_ebu_v3', 'pkg_h264_v6', 'pkg_h264_v7'. "

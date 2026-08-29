@@ -171,14 +171,14 @@ class GeminiReasoner:
             )
 
         raise ReasoningError(
-            f"{phase.value}: model did not record evidence after "
-            f"{self.max_attempts} attempts"
+            f"{phase.value}: model did not record evidence after {self.max_attempts} attempts"
         )
 
 
 # --------------------------------------------------------------------------
 # Fallback descriptions, used by ScriptedReasoner when no finding is supplied.
 # --------------------------------------------------------------------------
+
 
 def _describe(phase: Phase, summary: dict) -> str:
     if phase is Phase.BASELINE:

@@ -68,6 +68,42 @@ class ReasoningError(RuntimeError):
     pass
 
 
+class CredentialsError(ReasoningError):
+    """Vertex AI could not authenticate.
+
+    Google's own message for this is `DefaultCredentialsError: File ... was not
+    found`, which never mentions authentication and sends people looking for a
+    missing data file. This replaces it with the command that fixes it.
+    """
+
+
+_CREDENTIAL_HELP = """\
+Vertex AI could not authenticate ({detail}).
+
+Run the one-time login, which is interactive and isolates itself from any
+other gcloud account on this machine:
+
+    ./scripts/login.sh
+
+It sets CLOUDSDK_CONFIG to ./.gcloud, signs in, selects the project, configures
+Application Default Credentials with a quota project, and enables the Vertex AI
+API. Verify with ./scripts/guard_env.sh before retrying.
+
+Current: project={project} location={location} use_vertexai={vertex}\
+"""
+
+
+def _credentials_error(exc: Exception) -> CredentialsError:
+    return CredentialsError(
+        _CREDENTIAL_HELP.format(
+            detail=f"{type(exc).__name__}: {exc}",
+            project=os.environ.get("GOOGLE_CLOUD_PROJECT", "<unset>"),
+            location=os.environ.get("GOOGLE_CLOUD_LOCATION", "<unset>"),
+            vertex=os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "<unset>"),
+        )
+    )
+
+
 class Reasoner(Protocol):
     """Turns one phase's retrieved evidence into a recorded interpretation."""
 
@@ -153,12 +189,17 @@ class GeminiReasoner:
         )
 
         for _attempt in range(1, self.max_attempts + 1):
-            async for _ in runner.run_async(
-                user_id="investigator",
-                session_id=session.id,
-                new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
-            ):
-                pass
+            try:
+                async for _ in runner.run_async(
+                    user_id="investigator",
+                    session_id=session.id,
+                    new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
+                ):
+                    pass
+            except Exception as exc:
+                if _is_credentials_failure(exc):
+                    raise _credentials_error(exc) from exc
+                raise
             if recorded:
                 return recorded[0]
             # The model answered without calling the tool. Retrying is the
@@ -173,6 +214,24 @@ class GeminiReasoner:
         raise ReasoningError(
             f"{phase.value}: model did not record evidence after {self.max_attempts} attempts"
         )
+
+
+def _is_credentials_failure(exc: Exception) -> bool:
+    """Recognise an auth failure however google-auth chose to phrase it."""
+    name = type(exc).__name__
+    if "Credentials" in name or "Refresh" in name:
+        return True
+    text = str(exc).lower()
+    return any(
+        token in text
+        for token in (
+            "default credentials",
+            "could not automatically determine credentials",
+            "was not found",
+            "unauthenticated",
+            "permission denied on resource project",
+        )
+    )
 
 
 # --------------------------------------------------------------------------

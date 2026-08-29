@@ -104,3 +104,37 @@ class TestFullLoopOffline:
         ScriptedReasoner().interpret(ledger, Phase.BASELINE, BASELINE_SUMMARY)
         with pytest.raises((ReasoningError, LedgerError)):
             ScriptedReasoner().interpret(ledger, Phase.BASELINE, BASELINE_SUMMARY)
+
+
+class TestCredentialFailure:
+    """Vertex auth failures must be actionable and must not fabricate evidence.
+
+    Google's own message is `DefaultCredentialsError: File ... was not found`,
+    which never mentions authentication and sends people hunting for a missing
+    data file. It is the first error anyone hits.
+    """
+
+    def test_recognises_however_google_auth_phrases_it(self):
+        from google.auth.exceptions import DefaultCredentialsError
+
+        from agent.reasoner import _is_credentials_failure
+
+        assert _is_credentials_failure(DefaultCredentialsError("File x was not found."))
+        assert _is_credentials_failure(
+            RuntimeError("Could not automatically determine credentials")
+        )
+        assert _is_credentials_failure(RuntimeError("UNAUTHENTICATED: bad token"))
+        assert not _is_credentials_failure(ValueError("loudness out of range"))
+
+    def test_message_names_the_command_that_fixes_it(self, monkeypatch):
+        from agent.reasoner import _credentials_error
+
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "hackathon-506915")
+        message = str(_credentials_error(RuntimeError("boom")))
+        assert "./scripts/login.sh" in message
+        assert "hackathon-506915" in message, "must echo the config it actually used"
+
+    def test_a_failed_model_call_records_no_evidence(self, ledger):
+        """A credential failure must not leave phantom evidence behind."""
+        ledger.observe(Phase.BASELINE, "q", {})
+        assert len(ledger.steps) == 0

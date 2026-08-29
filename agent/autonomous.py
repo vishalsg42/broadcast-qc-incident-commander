@@ -204,6 +204,17 @@ Constraints you cannot talk your way around:
 """
 
 
+class ModelRateLimited(RuntimeError):
+    """Vertex AI refused the call: quota, not a defect in the investigation.
+
+    Raised so the orchestrator can say what actually happened. Left unhandled it
+    surfaced as a raw _ResourceExhaustedError with a documentation link, which is
+    an unreadable failure for an operator and a wasted take on camera. It is a
+    distinct outcome from running out of the call BUDGET, which is a finding
+    about the investigation - this is a finding about the account.
+    """
+
+
 @dataclass
 class ToolCall:
     """One tool the agent chose to run, and what came back."""
@@ -639,7 +650,16 @@ class AutonomousInvestigator:
             # investigation, not a crash, and the finally still runs.
             exhausted = True
             log.warning("agentic investigation exceeded its wall-clock budget")
-        except BaseException as exc:  # noqa: BLE001 - re-raised unless it is the budget
+        except BaseException as exc:  # noqa: BLE001 - re-raised unless it is handled
+            if _is_rate_limited(exc):
+                # Not a defect and not a finding: the account is out of quota.
+                # Re-raised as itself so the orchestrator can say so plainly.
+                log.warning("Vertex AI rate limited this investigation")
+                raise ModelRateLimited(
+                    "Vertex AI is rate limiting this project, so the "
+                    "investigation could not run. Wait a moment and try again, "
+                    "or use the scripted reasoner, which needs no model."
+                ) from exc
             if not _is_budget_exhausted(exc):
                 if _is_unknown_tool(exc):
                     log.warning("agent named a tool that does not exist: %s", exc)
@@ -768,6 +788,24 @@ def _is_budget_exhausted(exc: BaseException) -> bool:
     from google.adk.agents.invocation_context import LlmCallsLimitExceededError
 
     return any(isinstance(e, LlmCallsLimitExceededError) for e in _causes(exc))
+
+
+def _is_rate_limited(exc: BaseException) -> bool:
+    """Vertex refusing on quota, however it is spelled.
+
+    Matched by name and message rather than by importing a type: the genai and
+    api_core stacks each raise their own class here, the ADK wraps whichever
+    fired, and a missing import in this path would turn a rate limit into an
+    ImportError.
+    """
+    for e in _causes(exc):
+        name = type(e).__name__
+        if "ResourceExhausted" in name or "TooManyRequests" in name:
+            return True
+        text = str(e)[:400].lower()
+        if "resource_exhausted" in text or "429" in text and "quota" in text:
+            return True
+    return False
 
 
 def _is_unknown_tool(exc: BaseException) -> bool:
@@ -918,6 +956,7 @@ def _summarise(payload: dict) -> str:
 
 __all__ = [
     "CLAIM_SOURCES",
+    "ModelRateLimited",
     "MAX_QUERY_ROWS",
     "ROW_LIMITED_TOOLS",
     "MAX_TOOL_CHARS",

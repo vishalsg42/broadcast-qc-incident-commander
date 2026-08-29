@@ -22,6 +22,7 @@ from agent.autonomous import (
     MAX_TOOL_CHARS,
     AutonomousInvestigator,
     _failure_reason,
+    _is_rate_limited,
 )
 from agent.evidence import EvidenceLedger
 from pipeline.policy import load_profile
@@ -386,3 +387,33 @@ class TestConcurrentRunsAreBounded:
         assert o._runs is not None
         active = sum(1 for r in o._runs.values() if r.status in o.ACTIVE_STATUSES)
         assert active == 0
+
+
+class TestRateLimitingIsNotACrash:
+    """Vertex refusing on quota is a finding about the account, not the asset.
+
+    Left unclassified it surfaced as a raw _ResourceExhaustedError with a
+    documentation link: unreadable for an operator, and a wasted take when it
+    happens mid-recording. Observed live after eight runs back to back.
+    """
+
+    def test_the_genai_spelling_is_recognised(self):
+        class ResourceExhausted(Exception):
+            pass
+
+        assert _is_rate_limited(ResourceExhausted("429")) is True
+
+    def test_the_adk_wrapped_spelling_is_recognised(self):
+        class _ResourceExhaustedError(Exception):
+            pass
+
+        outer = RuntimeError("node failed")
+        outer.__cause__ = _ResourceExhaustedError("quota exceeded")
+        assert _is_rate_limited(outer) is True
+
+    def test_an_ordinary_failure_is_not_mistaken_for_quota(self):
+        assert _is_rate_limited(ValueError("tool not found")) is False
+
+    def test_a_budget_exhaustion_is_not_mistaken_for_quota(self):
+        """Two different outcomes: one is about the investigation, one the account."""
+        assert _is_rate_limited(RuntimeError("Max number of llm calls")) is False

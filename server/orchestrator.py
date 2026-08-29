@@ -26,7 +26,7 @@ from typing import Any
 import yaml
 
 from agent.annotations import GrafanaWriter, WriterConfig, annotation_text
-from agent.autonomous import AutonomousInvestigator, build_prompt
+from agent.autonomous import AutonomousInvestigator, ModelRateLimited, build_prompt
 from agent.conclusion import adversarial_candidates, build_conclusion, screen_candidate
 from agent.evidence import (
     EvidenceLedger,
@@ -682,7 +682,15 @@ class Orchestrator:
                 f"{c.check_id}: {c.message}" for c in verdict.checks if c.status == BLOCKED
             ],
         )
-        result = investigator.investigate(prompt)
+        try:
+            result = investigator.investigate(prompt)
+        except ModelRateLimited as exc:
+            # Quota, not a defect. The deterministic gate has already done its
+            # job - the asset is correctly blocked - so this escalates with a
+            # readable reason rather than dying with a provider stack trace.
+            run.emit("escalated", reason=str(exc))
+            self._screen_refusals(run, ledger, allowlist)
+            return None, None, None
         run.emit(
             "agent_finished",
             tool_calls=len(result.calls),

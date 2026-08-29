@@ -371,8 +371,8 @@ span attributes.
 
 | | |
 |---|---|
-| Agent | Google ADK 2.8.0, Gemini via Vertex AI |
-| Partner | Grafana Cloud — Loki, Tempo, annotations, IRM |
+| Agent | Google Cloud Agent Builder via the ADK 2.8.0, powered by Gemini 2.5 Flash on Vertex AI |
+| Partner | Grafana Cloud — Loki, Tempo, annotations, IRM, read through the official Grafana MCP server |
 | Measurement | ffmpeg `ebur128`, `blackdetect` |
 | Backend | Python 3.12, FastAPI, OpenTelemetry |
 | Frontend | Next.js 15, Tailwind 4, TanStack Query + Table |

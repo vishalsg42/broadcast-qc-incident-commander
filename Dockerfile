@@ -21,7 +21,21 @@ COPY ui/ ./
 RUN npm run build
 
 
-# ---- stage 2: runtime --------------------------------------------------------
+# ---- stage 2: the Grafana MCP server -----------------------------------------
+# The agent's observability toolbox is the OFFICIAL Grafana MCP server, not a
+# client we wrote. Fetched at a pinned version and checksum-verified, because a
+# binary that runs with our Grafana credentials is not something to take on
+# trust from a redirect.
+FROM debian:bookworm-slim AS mcp
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /fetch
+COPY scripts/fetch_mcp_grafana.sh ./
+RUN chmod +x fetch_mcp_grafana.sh && ./fetch_mcp_grafana.sh /out
+
+
+# ---- stage 3: runtime --------------------------------------------------------
 FROM python:3.12-slim
 
 # ffmpeg for measurement (ebur128, blackdetect) and for the repair re-encode.
@@ -39,6 +53,8 @@ COPY pipeline/ ./pipeline/
 COPY agent/ ./agent/
 COPY server/ ./server/
 COPY --from=ui /ui/dist ./ui/dist
+# On PATH, where agent/grafana_mcp.py looks for it first.
+COPY --from=mcp /out/mcp-grafana /usr/local/bin/mcp-grafana
 
 # Generate the fixtures rather than shipping them.
 #

@@ -246,7 +246,8 @@ export default function ControlRoom() {
 
         <footer className="shrink-0 border-t border-rule px-6 py-2">
           <p className="legend">
-            The model interprets and proposes · deterministic code gathers, adjudicates and executes
+            The model plans and tests · deterministic code runs every query, records what
+            actually ran, and holds the only key to any action
           </p>
         </footer>
       </div>
